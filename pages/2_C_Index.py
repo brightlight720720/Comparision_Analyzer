@@ -30,7 +30,7 @@ When comparing two models:
 - The difference in C-Indices, along with its confidence interval and p-value, helps determine if the improvement is statistically significant
 """)
 
-def compute_c_index(y_true, y_pred, n_bootstrap=1000):
+def compute_c_index(y_true, y_pred):
     df = pd.concat([y_true, y_pred], axis=1)
     
     cox_model = CoxPHFitter()
@@ -98,8 +98,6 @@ if uploaded_file is not None:
         if st.button("Compute C-Index"):
             if len(old_model_columns) == 0 or len(new_model_columns) == 0:
                 st.error("Please select at least one column for both old and new models.")
-            elif len(old_model_columns) != len(new_model_columns):
-                st.error("The number of columns for old and new models must be the same.")
             else:
                 with st.spinner("Computing C-Index..."):
                     y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})

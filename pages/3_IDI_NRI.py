@@ -33,7 +33,7 @@ NRI assesses the improvement in risk classification offered by a new model compa
 """)
 
 def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
-    idi = np.mean(y_pred_new - y_pred_old)
+    idi = np.mean(y_pred_new) - np.mean(y_pred_old)
     
     bootstrap_idis = []
     for _ in range(n_bootstrap):
@@ -41,7 +41,7 @@ def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
         y_true_resampled = y_true.iloc[indices]
         y_pred_old_resampled = y_pred_old.iloc[indices]
         y_pred_new_resampled = y_pred_new.iloc[indices]
-        bootstrap_idis.append(np.mean(y_pred_new_resampled - y_pred_old_resampled))
+        bootstrap_idis.append(np.mean(y_pred_new_resampled) - np.mean(y_pred_old_resampled))
     
     ci_lower = np.percentile(bootstrap_idis, alpha/2 * 100)
     ci_upper = np.percentile(bootstrap_idis, (1 - alpha/2) * 100)
@@ -122,47 +122,18 @@ if uploaded_file is not None:
         if st.button("Compute IDI and NRI"):
             if len(old_model_columns) == 0 or len(new_model_columns) == 0:
                 st.error("Please select at least one column for both old and new models.")
-            elif len(old_model_columns) != len(new_model_columns):
-                st.error("The number of columns for old and new models must be the same.")
             else:
                 with st.spinner("Computing IDI and NRI..."):
                     y_true = df[dead_column]
-                    y_pred_old = df[old_model_columns]
-                    y_pred_new = df[new_model_columns]
+                    y_pred_old = df[old_model_columns].mean(axis=1)
+                    y_pred_new = df[new_model_columns].mean(axis=1)
                     
-                    idi_results = []
-                    nri_results = []
-                    
-                    for old_col, new_col in zip(old_model_columns, new_model_columns):
-                        idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old[old_col], y_pred_new[new_col])
-                        nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old[old_col], y_pred_new[new_col])
-                        
-                        idi_results.append({
-                            'old_model': old_col,
-                            'new_model': new_col,
-                            'idi': idi,
-                            'ci_lower': idi_ci_lower,
-                            'ci_upper': idi_ci_upper,
-                            'p_value': idi_p_value
-                        })
-                        
-                        nri_results.append({
-                            'old_model': old_col,
-                            'new_model': new_col,
-                            'nri': nri,
-                            'nri_events': nri_events,
-                            'nri_nonevents': nri_nonevents,
-                            'ci_lower': nri_ci_lower,
-                            'ci_upper': nri_ci_upper,
-                            'p_value': nri_p_value
-                        })
+                    idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old, y_pred_new)
+                    nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old, y_pred_new)
                 
                 st.subheader("IDI Results")
-                for result in idi_results:
-                    st.write(f"{result['old_model']} vs {result['new_model']}:")
-                    st.write(f"IDI: {result['idi']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
-                    st.write(f"P-value: {result['p_value']:.4f}")
-                    st.write("")
+                st.write(f"IDI: {idi:.4f} (95% CI: {idi_ci_lower:.4f} - {idi_ci_upper:.4f})")
+                st.write(f"P-value: {idi_p_value:.4f}")
                 
                 st.markdown("""
                 ### Interpretation of IDI Results:
@@ -173,13 +144,10 @@ if uploaded_file is not None:
                 """)
                 
                 st.subheader("NRI Results")
-                for result in nri_results:
-                    st.write(f"{result['old_model']} vs {result['new_model']}:")
-                    st.write(f"NRI: {result['nri']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
-                    st.write(f"NRI for events: {result['nri_events']:.4f}")
-                    st.write(f"NRI for non-events: {result['nri_nonevents']:.4f}")
-                    st.write(f"P-value: {result['p_value']:.4f}")
-                    st.write("")
+                st.write(f"NRI: {nri:.4f} (95% CI: {nri_ci_lower:.4f} - {nri_ci_upper:.4f})")
+                st.write(f"NRI for events: {nri_events:.4f}")
+                st.write(f"NRI for non-events: {nri_nonevents:.4f}")
+                st.write(f"P-value: {nri_p_value:.4f}")
                 
                 st.markdown("""
                 ### Interpretation of NRI Results:
@@ -192,10 +160,15 @@ if uploaded_file is not None:
                 """)
                 
                 # Export results
-                idi_df = pd.DataFrame(idi_results)
-                nri_df = pd.DataFrame(nri_results)
+                results_df = pd.DataFrame({
+                    'Metric': ['IDI', 'IDI CI Lower', 'IDI CI Upper', 'IDI P-value',
+                               'NRI', 'NRI CI Lower', 'NRI CI Upper', 'NRI P-value',
+                               'NRI Events', 'NRI Non-events'],
+                    'Value': [idi, idi_ci_lower, idi_ci_upper, idi_p_value,
+                              nri, nri_ci_lower, nri_ci_upper, nri_p_value,
+                              nri_events, nri_nonevents]
+                })
                 
-                results_df = pd.concat([idi_df, nri_df], axis=1, keys=['IDI', 'NRI'])
                 csv = results_df.to_csv(index=False)
                 st.download_button(
                     label="Download IDI/NRI Results",
@@ -208,20 +181,17 @@ if uploaded_file is not None:
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
                 
                 # IDI plot
-                ax1.bar(range(len(idi_results)), [r['idi'] for r in idi_results], yerr=[[r['idi']-r['ci_lower'] for r in idi_results], [r['ci_upper']-r['idi'] for r in idi_results]], capsize=5)
-                ax1.set_xlabel('Model Comparison')
+                ax1.bar(['IDI'], [idi], yerr=[[idi-idi_ci_lower], [idi_ci_upper-idi]], capsize=5)
                 ax1.set_ylabel('IDI')
                 ax1.set_title('Integrated Discrimination Improvement (IDI)')
-                ax1.set_xticks(range(len(idi_results)))
-                ax1.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in idi_results], rotation=45, ha='right')
+                ax1.text(0, idi, f'{idi:.3f}', ha='center', va='bottom')
                 
                 # NRI plot
-                ax2.bar(range(len(nri_results)), [r['nri'] for r in nri_results], yerr=[[r['nri']-r['ci_lower'] for r in nri_results], [r['ci_upper']-r['nri'] for r in nri_results]], capsize=5)
-                ax2.set_xlabel('Model Comparison')
+                ax2.bar(['NRI', 'NRI Events', 'NRI Non-events'], [nri, nri_events, nri_nonevents], yerr=[[nri-nri_ci_lower, 0, 0], [nri_ci_upper-nri, 0, 0]], capsize=5)
                 ax2.set_ylabel('NRI')
                 ax2.set_title('Net Reclassification Improvement (NRI)')
-                ax2.set_xticks(range(len(nri_results)))
-                ax2.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in nri_results], rotation=45, ha='right')
+                for i, v in enumerate([nri, nri_events, nri_nonevents]):
+                    ax2.text(i, v, f'{v:.3f}', ha='center', va='bottom')
                 
                 plt.tight_layout()
                 st.pyplot(fig)
