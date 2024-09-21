@@ -5,40 +5,76 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
 import io
+from scipy import stats
+from sklearn.utils import resample
 
 # Set page title and layout
 st.set_page_config(page_title="CSV Analysis App", layout="wide")
 
-# Function to compute C-index (ROC AUC) for multiple columns
-def compute_c_index(y_true, y_pred):
-    return [roc_auc_score(y_true, y_pred[col]) for col in y_pred.columns]
-
-# Function to compute IDI for multiple columns
-def compute_idi(y_true, y_pred_old, y_pred_new):
-    idi_values = []
-    mean_old_values = []
-    mean_new_values = []
+# Function to compute C-index (ROC AUC) with confidence interval and p-value
+def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
+    results = []
+    for col in y_pred.columns:
+        c_index = roc_auc_score(y_true, y_pred[col])
+        
+        # Bootstrap for confidence interval
+        bootstrap_scores = []
+        for _ in range(n_bootstrap):
+            y_true_resampled, y_pred_resampled = resample(y_true, y_pred[col])
+            bootstrap_scores.append(roc_auc_score(y_true_resampled, y_pred_resampled))
+        
+        ci_lower = np.percentile(bootstrap_scores, alpha/2 * 100)
+        ci_upper = np.percentile(bootstrap_scores, (1 - alpha/2) * 100)
+        
+        # Compute p-value (two-tailed test against null hypothesis of AUC = 0.5)
+        z_score = (c_index - 0.5) / np.std(bootstrap_scores)
+        p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
+        
+        results.append({
+            'c_index': c_index,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
+            'p_value': p_value
+        })
     
+    return results
+
+# Function to compute IDI with confidence interval and p-value
+def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
+    results = []
     for old_col, new_col in zip(y_pred_old.columns, y_pred_new.columns):
-        mean_old = np.mean(y_pred_old[old_col])
-        mean_new = np.mean(y_pred_new[new_col])
+        idi = np.mean(y_pred_new[new_col] - y_pred_old[old_col])
         
-        idi_events = np.mean(y_pred_new[new_col][y_true == 1]) - np.mean(y_pred_old[old_col][y_true == 1])
-        idi_nonevents = np.mean(y_pred_old[old_col][y_true == 0]) - np.mean(y_pred_new[new_col][y_true == 0])
-        idi = idi_events + idi_nonevents
+        # Bootstrap for confidence interval and p-value
+        bootstrap_idis = []
+        for _ in range(n_bootstrap):
+            indices = resample(range(len(y_true)))
+            y_true_resampled = y_true.iloc[indices]
+            y_pred_old_resampled = y_pred_old[old_col].iloc[indices]
+            y_pred_new_resampled = y_pred_new[new_col].iloc[indices]
+            bootstrap_idis.append(np.mean(y_pred_new_resampled - y_pred_old_resampled))
         
-        idi_values.append(idi)
-        mean_old_values.append(mean_old)
-        mean_new_values.append(mean_new)
+        ci_lower = np.percentile(bootstrap_idis, alpha/2 * 100)
+        ci_upper = np.percentile(bootstrap_idis, (1 - alpha/2) * 100)
+        
+        # Compute p-value (two-tailed test against null hypothesis of IDI = 0)
+        t_statistic = idi / (np.std(bootstrap_idis) / np.sqrt(n_bootstrap))
+        p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
+        
+        results.append({
+            'idi': idi,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
+            'p_value': p_value,
+            'mean_old': np.mean(y_pred_old[old_col]),
+            'mean_new': np.mean(y_pred_new[new_col])
+        })
     
-    return idi_values, mean_old_values, mean_new_values
+    return results
 
-# Function to compute NRI for multiple columns
-def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5):
-    nri_values = []
-    nri_events_values = []
-    nri_nonevents_values = []
-    
+# Function to compute NRI with confidence interval and p-value
+def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000, alpha=0.05):
+    results = []
     for old_col, new_col in zip(y_pred_old.columns, y_pred_new.columns):
         events_improved = np.sum((y_pred_new[new_col] > threshold) & (y_pred_old[old_col] <= threshold) & (y_true == 1))
         events_worsened = np.sum((y_pred_new[new_col] <= threshold) & (y_pred_old[old_col] > threshold) & (y_true == 1))
@@ -49,11 +85,40 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5):
         nri_nonevents = (nonevents_improved - nonevents_worsened) / np.sum(y_true == 0)
         nri = nri_events + nri_nonevents
         
-        nri_values.append(nri)
-        nri_events_values.append(nri_events)
-        nri_nonevents_values.append(nri_nonevents)
+        # Bootstrap for confidence interval and p-value
+        bootstrap_nris = []
+        for _ in range(n_bootstrap):
+            indices = resample(range(len(y_true)))
+            y_true_resampled = y_true.iloc[indices]
+            y_pred_old_resampled = y_pred_old[old_col].iloc[indices]
+            y_pred_new_resampled = y_pred_new[new_col].iloc[indices]
+            
+            events_improved = np.sum((y_pred_new_resampled > threshold) & (y_pred_old_resampled <= threshold) & (y_true_resampled == 1))
+            events_worsened = np.sum((y_pred_new_resampled <= threshold) & (y_pred_old_resampled > threshold) & (y_true_resampled == 1))
+            nonevents_improved = np.sum((y_pred_new_resampled <= threshold) & (y_pred_old_resampled > threshold) & (y_true_resampled == 0))
+            nonevents_worsened = np.sum((y_pred_new_resampled > threshold) & (y_pred_old_resampled <= threshold) & (y_true_resampled == 0))
+            
+            nri_events = (events_improved - events_worsened) / np.sum(y_true_resampled == 1)
+            nri_nonevents = (nonevents_improved - nonevents_worsened) / np.sum(y_true_resampled == 0)
+            bootstrap_nris.append(nri_events + nri_nonevents)
+        
+        ci_lower = np.percentile(bootstrap_nris, alpha/2 * 100)
+        ci_upper = np.percentile(bootstrap_nris, (1 - alpha/2) * 100)
+        
+        # Compute p-value (two-tailed test against null hypothesis of NRI = 0)
+        t_statistic = nri / (np.std(bootstrap_nris) / np.sqrt(n_bootstrap))
+        p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
+        
+        results.append({
+            'nri': nri,
+            'nri_events': nri_events,
+            'nri_nonevents': nri_nonevents,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
+            'p_value': p_value
+        })
     
-    return nri_values, nri_events_values, nri_nonevents_values
+    return results
 
 # Function to split CSV based on column condition
 def split_csv(dataframe, column_name, condition_value, condition_operator):
@@ -210,10 +275,10 @@ def main():
 
                     # Compute metrics
                     with st.spinner("Computing metrics..."):
-                        c_index_old = compute_c_index(y_true, y_pred_old)
-                        c_index_new = compute_c_index(y_true, y_pred_new)
-                        idi_values, mean_old_values, mean_new_values = compute_idi(y_true, y_pred_old, y_pred_new)
-                        nri_values, nri_events_values, nri_nonevents_values = compute_nri(y_true, y_pred_old, y_pred_new)
+                        c_index_results = compute_c_index(y_true, y_pred_old)
+                        c_index_new_results = compute_c_index(y_true, y_pred_new)
+                        idi_results = compute_idi(y_true, y_pred_old, y_pred_new)
+                        nri_results = compute_nri(y_true, y_pred_old, y_pred_new)
 
                     # Display results
                     st.subheader("Results")
@@ -223,26 +288,26 @@ def main():
                         st.write("C-index (ROC AUC):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
                             st.write(f"{old_col} vs {new_col}:")
-                            st.write(f"Old model: {c_index_old[i]:.4f}")
-                            st.write(f"New model: {c_index_new[i]:.4f}")
-                            st.write(f"Improvement: {c_index_new[i] - c_index_old[i]:.4f}")
+                            st.write(f"Old model: {c_index_results[i]['c_index']:.4f} (95% CI: {c_index_results[i]['ci_lower']:.4f} - {c_index_results[i]['ci_upper']:.4f}, p-value: {c_index_results[i]['p_value']:.4f})")
+                            st.write(f"New model: {c_index_new_results[i]['c_index']:.4f} (95% CI: {c_index_new_results[i]['ci_lower']:.4f} - {c_index_new_results[i]['ci_upper']:.4f}, p-value: {c_index_new_results[i]['p_value']:.4f})")
+                            st.write(f"Improvement: {c_index_new_results[i]['c_index'] - c_index_results[i]['c_index']:.4f}")
                             st.write("")
 
                         st.write("Integrated Discrimination Improvement (IDI):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
                             st.write(f"{old_col} vs {new_col}:")
-                            st.write(f"IDI: {idi_values[i]:.4f}")
-                            st.write(f"Mean predicted probability (old model): {mean_old_values[i]:.4f}")
-                            st.write(f"Mean predicted probability (new model): {mean_new_values[i]:.4f}")
+                            st.write(f"IDI: {idi_results[i]['idi']:.4f} (95% CI: {idi_results[i]['ci_lower']:.4f} - {idi_results[i]['ci_upper']:.4f}, p-value: {idi_results[i]['p_value']:.4f})")
+                            st.write(f"Mean predicted probability (old model): {idi_results[i]['mean_old']:.4f}")
+                            st.write(f"Mean predicted probability (new model): {idi_results[i]['mean_new']:.4f}")
                             st.write("")
 
                     with col2:
                         st.write("Net Reclassification Improvement (NRI):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
                             st.write(f"{old_col} vs {new_col}:")
-                            st.write(f"NRI: {nri_values[i]:.4f}")
-                            st.write(f"NRI for events: {nri_events_values[i]:.4f}")
-                            st.write(f"NRI for non-events: {nri_nonevents_values[i]:.4f}")
+                            st.write(f"NRI: {nri_results[i]['nri']:.4f} (95% CI: {nri_results[i]['ci_lower']:.4f} - {nri_results[i]['ci_upper']:.4f}, p-value: {nri_results[i]['p_value']:.4f})")
+                            st.write(f"NRI for events: {nri_results[i]['nri_events']:.4f}")
+                            st.write(f"NRI for non-events: {nri_results[i]['nri_nonevents']:.4f}")
                             st.write("")
 
                     # Visualizations
@@ -258,6 +323,16 @@ def main():
                         
                         ax.plot(fpr_old, tpr_old, label=f'Old Model ({old_col})')
                         ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
+                        
+                        # Add error bars for C-index
+                        ax.errorbar(0.5, c_index_results[i]['c_index'], 
+                                    yerr=[[c_index_results[i]['c_index'] - c_index_results[i]['ci_lower']], 
+                                          [c_index_results[i]['ci_upper'] - c_index_results[i]['c_index']]], 
+                                    fmt='o', capsize=5, label=f'Old Model CI ({old_col})')
+                        ax.errorbar(0.55, c_index_new_results[i]['c_index'], 
+                                    yerr=[[c_index_new_results[i]['c_index'] - c_index_new_results[i]['ci_lower']], 
+                                          [c_index_new_results[i]['ci_upper'] - c_index_new_results[i]['c_index']]], 
+                                    fmt='o', capsize=5, label=f'New Model CI ({new_col})')
                     
                     ax.set_xlabel('False Positive Rate')
                     ax.set_ylabel('True Positive Rate')
