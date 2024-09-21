@@ -11,27 +11,20 @@ from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.utils import concordance_index
 import seaborn as sns
 
-# Set page title and layout
 st.set_page_config(page_title="CSV Analysis App", layout="wide")
 
-# Function to compute C-index with confidence interval and p-value
 def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     results = []
     
-    # Combine all prediction columns with Duration and Dead
     df = pd.concat([y_true, y_pred], axis=1)
     
-    # Fit a Cox Proportional Hazards model
     cox_model = CoxPHFitter()
     cox_model.fit(df, duration_col='Duration', event_col='Dead')
     
-    # Get the risk score (linear predictor) from the model
     df['risk_score'] = cox_model.predict_partial_hazard(df)
     
-    # Compute the C-index
     c_index = concordance_index(df['Duration'], df['risk_score'], df['Dead'])
     
-    # Bootstrap for confidence interval and p-value
     bootstrap_scores = []
     for _ in range(n_bootstrap):
         indices = resample(range(len(df)))
@@ -44,7 +37,6 @@ def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     ci_lower = np.percentile(bootstrap_scores, alpha/2 * 100)
     ci_upper = np.percentile(bootstrap_scores, (1 - alpha/2) * 100)
     
-    # Compute p-value (two-tailed test against null hypothesis of C-index = 0.5)
     z_score = (c_index - 0.5) / np.std(bootstrap_scores)
     p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
     
@@ -57,13 +49,11 @@ def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     
     return results
 
-# Function to compute IDI with confidence interval and p-value
 def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
     results = []
     for old_col, new_col in zip(y_pred_old.columns, y_pred_new.columns):
         idi = np.mean(y_pred_new[new_col] - y_pred_old[old_col])
         
-        # Bootstrap for confidence interval and p-value
         bootstrap_idis = []
         for _ in range(n_bootstrap):
             indices = resample(range(len(y_true)))
@@ -75,7 +65,6 @@ def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
         ci_lower = np.percentile(bootstrap_idis, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_idis, (1 - alpha/2) * 100)
         
-        # Compute p-value (two-tailed test against null hypothesis of IDI = 0)
         t_statistic = idi / (np.std(bootstrap_idis) / np.sqrt(n_bootstrap))
         p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
         
@@ -90,7 +79,6 @@ def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
     
     return results
 
-# Function to compute NRI with confidence interval and p-value
 def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000, alpha=0.05):
     results = []
     for old_col, new_col in zip(y_pred_old.columns, y_pred_new.columns):
@@ -103,7 +91,6 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
         nri_nonevents = (nonevents_improved - nonevents_worsened) / np.sum(y_true == 0)
         nri = nri_events + nri_nonevents
         
-        # Bootstrap for confidence interval and p-value
         bootstrap_nris = []
         for _ in range(n_bootstrap):
             indices = resample(range(len(y_true)))
@@ -123,7 +110,6 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
         ci_lower = np.percentile(bootstrap_nris, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_nris, (1 - alpha/2) * 100)
         
-        # Compute p-value (two-tailed test against null hypothesis of NRI = 0)
         t_statistic = nri / (np.std(bootstrap_nris) / np.sqrt(n_bootstrap))
         p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
         
@@ -180,23 +166,42 @@ def plot_hazard_ratio_forest(df, duration_col, event_col, covariates):
     
     return fig
 
-# Main app
+def generate_report(c_index_results_old, c_index_results_new, idi_results, nri_results, old_model_columns, new_model_columns):
+    report = []
+    
+    report.append(["Metric", "Old Model", "New Model", "Improvement"])
+    report.append(["C-index", 
+                   f"{c_index_results_old[0]['c_index']:.4f} (95% CI: {c_index_results_old[0]['ci_lower']:.4f} - {c_index_results_old[0]['ci_upper']:.4f}, p-value: {c_index_results_old[0]['p_value']:.4f})",
+                   f"{c_index_results_new[0]['c_index']:.4f} (95% CI: {c_index_results_new[0]['ci_lower']:.4f} - {c_index_results_new[0]['ci_upper']:.4f}, p-value: {c_index_results_new[0]['p_value']:.4f})",
+                   f"{c_index_results_new[0]['c_index'] - c_index_results_old[0]['c_index']:.4f}"])
+    
+    for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+        report.append([f"IDI ({old_col} vs {new_col})",
+                       f"Mean prob: {idi_results[i]['mean_old']:.4f}",
+                       f"Mean prob: {idi_results[i]['mean_new']:.4f}",
+                       f"{idi_results[i]['idi']:.4f} (95% CI: {idi_results[i]['ci_lower']:.4f} - {idi_results[i]['ci_upper']:.4f}, p-value: {idi_results[i]['p_value']:.4f})"])
+    
+    for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+        report.append([f"NRI ({old_col} vs {new_col})",
+                       f"Events: {nri_results[i]['nri_events']:.4f}",
+                       f"Non-events: {nri_results[i]['nri_nonevents']:.4f}",
+                       f"{nri_results[i]['nri']:.4f} (95% CI: {nri_results[i]['ci_lower']:.4f} - {nri_results[i]['ci_upper']:.4f}, p-value: {nri_results[i]['p_value']:.4f})"])
+    
+    return pd.DataFrame(report[1:], columns=report[0])
+
 def main():
     st.title("CSV Analysis App")
     st.write("Upload a CSV file, select columns, and compute advanced statistical analyses")
 
-    # File upload
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
     if uploaded_file is not None:
         try:
-            # Read CSV file
             df = pd.read_csv(uploaded_file)
             
             st.subheader("Data Preview")
             st.write(df.head())
 
-            # Column selection
             st.subheader("Column Selection")
             st.write("Please select the required columns for analysis.")
             
@@ -214,19 +219,16 @@ def main():
 
             if st.button("Compute Metrics and Visualizations"):
                 try:
-                    # Prepare data
                     y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
                     y_pred_old = df[old_model_columns]
                     y_pred_new = df[new_model_columns]
 
-                    # Compute metrics
                     with st.spinner("Computing metrics and generating visualizations..."):
                         c_index_results_old = compute_c_index(y_true, y_pred_old)
                         c_index_results_new = compute_c_index(y_true, y_pred_new)
                         idi_results = compute_idi(y_true['Dead'], y_pred_old, y_pred_new)
                         nri_results = compute_nri(y_true['Dead'], y_pred_old, y_pred_new)
 
-                    # Display results
                     st.subheader("Results")
                     col1, col2 = st.columns(2)
 
@@ -255,10 +257,8 @@ def main():
                             st.write(f"NRI for non-events: {nri_results[i]['nri_nonevents']:.4f}")
                             st.write("")
 
-                    # Visualizations
                     st.subheader("Visualizations")
                     
-                    # ROC curve
                     fig, ax = plt.subplots(figsize=(10, 6))
                     ax.plot([0, 1], [0, 1], linestyle='--', label='Random Classifier')
                     
@@ -275,7 +275,6 @@ def main():
                     ax.legend()
                     st.pyplot(fig)
 
-                    # Calibration plot
                     fig, ax = plt.subplots(figsize=(10, 6))
                     ax.plot([0, 1], [0, 1], linestyle='--', label='Perfectly Calibrated')
                     
@@ -292,20 +291,26 @@ def main():
                     ax.legend()
                     st.pyplot(fig)
 
-                    # New visualizations
                     st.subheader("Advanced Statistical Analyses")
 
-                    # Kaplan-Meier survival curve
                     km_fig = plot_kaplan_meier(df, duration_column, dead_column)
                     st.pyplot(km_fig)
 
-                    # Cox Proportional Hazards model summary
                     cox_summary_fig = plot_cox_summary(df, duration_column, dead_column, new_model_columns)
                     st.pyplot(cox_summary_fig)
 
-                    # Hazard ratio forest plot
                     hr_forest_fig = plot_hazard_ratio_forest(df, duration_column, dead_column, new_model_columns)
                     st.pyplot(hr_forest_fig)
+
+                    report_df = generate_report(c_index_results_old, c_index_results_new, idi_results, nri_results, old_model_columns, new_model_columns)
+                    
+                    csv = report_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download Analysis Report",
+                        data=csv,
+                        file_name="analysis_report.csv",
+                        mime="text/csv",
+                    )
 
                 except Exception as e:
                     st.error(f"An error occurred while computing metrics: {str(e)}")
