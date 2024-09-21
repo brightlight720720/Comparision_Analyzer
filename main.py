@@ -17,6 +17,10 @@ def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     for col in y_pred.columns:
         c_index = roc_auc_score(y_true, y_pred[col])
         
+        # Debug logging
+        print(f"Computing C-index for column: {col}")
+        print(f"C-index value: {c_index}")
+        
         # Bootstrap for confidence interval
         bootstrap_scores = []
         for _ in range(n_bootstrap):
@@ -31,11 +35,19 @@ def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
         p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
         
         results.append({
+            'column': col,
             'c_index': c_index,
             'ci_lower': ci_lower,
             'ci_upper': ci_upper,
             'p_value': p_value
         })
+        
+        # Debug logging
+        print(f"Results for column {col}:")
+        print(f"C-index: {c_index:.4f}")
+        print(f"95% CI: ({ci_lower:.4f} - {ci_upper:.4f})")
+        print(f"p-value: {p_value:.4f}")
+        print("---")
     
     return results
 
@@ -260,13 +272,7 @@ def main():
                 new_model_columns = st.multiselect("Select the new model predictions columns", df.columns)
                 st.write(f"New model columns selected: {len(new_model_columns)}")
 
-            # Validation check
-            columns_valid = len(old_model_columns) == len(new_model_columns) and len(old_model_columns) > 0
-
-            if not columns_valid:
-                st.warning("Please select an equal number of columns for both old and new models, and ensure at least one column is selected for each.")
-
-            if st.button("Compute Metrics", disabled=not columns_valid):
+            if st.button("Compute Metrics"):
                 try:
                     # Prepare data
                     y_true = df[target_column]
@@ -275,8 +281,8 @@ def main():
 
                     # Compute metrics
                     with st.spinner("Computing metrics..."):
-                        c_index_results = compute_c_index(y_true, y_pred_old)
-                        c_index_new_results = compute_c_index(y_true, y_pred_new)
+                        c_index_results_old = compute_c_index(y_true, y_pred_old)
+                        c_index_results_new = compute_c_index(y_true, y_pred_new)
                         idi_results = compute_idi(y_true, y_pred_old, y_pred_new)
                         nri_results = compute_nri(y_true, y_pred_old, y_pred_new)
 
@@ -286,11 +292,13 @@ def main():
 
                     with col1:
                         st.write("C-index (ROC AUC):")
-                        for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+                        for old_result, new_result in zip(c_index_results_old, c_index_results_new):
+                            old_col = old_result['column']
+                            new_col = new_result['column']
                             st.write(f"{old_col} vs {new_col}:")
-                            st.write(f"Old model: {c_index_results[i]['c_index']:.4f} (95% CI: {c_index_results[i]['ci_lower']:.4f} - {c_index_results[i]['ci_upper']:.4f}, p-value: {c_index_results[i]['p_value']:.4f})")
-                            st.write(f"New model: {c_index_new_results[i]['c_index']:.4f} (95% CI: {c_index_new_results[i]['ci_lower']:.4f} - {c_index_new_results[i]['ci_upper']:.4f}, p-value: {c_index_new_results[i]['p_value']:.4f})")
-                            st.write(f"Improvement: {c_index_new_results[i]['c_index'] - c_index_results[i]['c_index']:.4f}")
+                            st.write(f"Old model: {old_result['c_index']:.4f} (95% CI: {old_result['ci_lower']:.4f} - {old_result['ci_upper']:.4f}, p-value: {old_result['p_value']:.4f})")
+                            st.write(f"New model: {new_result['c_index']:.4f} (95% CI: {new_result['ci_lower']:.4f} - {new_result['ci_upper']:.4f}, p-value: {new_result['p_value']:.4f})")
+                            st.write(f"Improvement: {new_result['c_index'] - old_result['c_index']:.4f}")
                             st.write("")
 
                         st.write("Integrated Discrimination Improvement (IDI):")
@@ -325,13 +333,13 @@ def main():
                         ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
                         
                         # Add error bars for C-index
-                        ax.errorbar(0.5, c_index_results[i]['c_index'], 
-                                    yerr=[[c_index_results[i]['c_index'] - c_index_results[i]['ci_lower']], 
-                                          [c_index_results[i]['ci_upper'] - c_index_results[i]['c_index']]], 
+                        ax.errorbar(0.5, c_index_results_old[i]['c_index'], 
+                                    yerr=[[c_index_results_old[i]['c_index'] - c_index_results_old[i]['ci_lower']], 
+                                          [c_index_results_old[i]['ci_upper'] - c_index_results_old[i]['c_index']]], 
                                     fmt='o', capsize=5, label=f'Old Model CI ({old_col})')
-                        ax.errorbar(0.55, c_index_new_results[i]['c_index'], 
-                                    yerr=[[c_index_new_results[i]['c_index'] - c_index_new_results[i]['ci_lower']], 
-                                          [c_index_new_results[i]['ci_upper'] - c_index_new_results[i]['c_index']]], 
+                        ax.errorbar(0.55, c_index_results_new[i]['c_index'], 
+                                    yerr=[[c_index_results_new[i]['c_index'] - c_index_results_new[i]['ci_lower']], 
+                                          [c_index_results_new[i]['ci_upper'] - c_index_results_new[i]['c_index']]], 
                                     fmt='o', capsize=5, label=f'New Model CI ({new_col})')
                     
                     ax.set_xlabel('False Positive Rate')
