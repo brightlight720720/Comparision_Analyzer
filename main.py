@@ -54,6 +54,22 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5):
     
     return nri_values, nri_events_values, nri_nonevents_values
 
+# New function to split CSV based on column condition
+def split_csv(dataframe, column_name, condition_value, condition_operator):
+    if condition_operator == "equal to":
+        condition = dataframe[column_name] == condition_value
+    elif condition_operator == "greater than":
+        condition = dataframe[column_name] > condition_value
+    elif condition_operator == "less than":
+        condition = dataframe[column_name] < condition_value
+    else:
+        raise ValueError("Invalid condition operator")
+    
+    df_true = dataframe[condition]
+    df_false = dataframe[~condition]
+    
+    return df_true, df_false
+
 # Main app
 def main():
     st.title("CSV Analysis App")
@@ -67,6 +83,25 @@ def main():
         df = pd.read_csv(uploaded_file)
         st.write("Data Preview:")
         st.write(df.head())
+
+        # New section for CSV splitting
+        st.subheader("Split CSV")
+        split_column = st.selectbox("Select column to split on", df.columns)
+        condition_operator = st.selectbox("Select condition operator", ["equal to", "greater than", "less than"])
+        condition_value = st.text_input("Enter condition value")
+
+        if st.button("Split CSV"):
+            try:
+                condition_value = float(condition_value) if condition_value.replace('.', '').isdigit() else condition_value
+                df_true, df_false = split_csv(df, split_column, condition_value, condition_operator)
+                
+                st.write("Rows that meet the condition:")
+                st.write(df_true)
+                
+                st.write("Rows that don't meet the condition:")
+                st.write(df_false)
+            except ValueError as e:
+                st.error(f"Error: {str(e)}")
 
         # Column selection
         st.subheader("Column Selection")
