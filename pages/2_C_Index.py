@@ -129,7 +129,7 @@ if uploaded_file is not None:
                 fig, ax = plt.subplots(figsize=(10, 6))
                 x = ['Old Model', 'New Model']
                 y = [c_index_old, c_index_new]
-                yerr = [[0, c_index_new - ci_lower], [0, ci_upper - c_index_new]]  # Asymmetric error bars
+                yerr = [[0, max(0, c_index_new - ci_lower)], [0, max(0, ci_upper - c_index_new)]]  # Ensure non-negative values
                 ax.bar(x, y, yerr=yerr, capsize=5)
                 ax.set_ylabel('C-Index')
                 ax.set_title('C-Index Comparison')
