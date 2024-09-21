@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
+import io
 
 # Set page title and layout
 st.set_page_config(page_title="CSV Analysis App", layout="wide")
@@ -109,6 +110,10 @@ def generate_csv_summary(dataframe):
     
     return pd.DataFrame(summary)
 
+# Function to convert dataframe to CSV
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8')
+
 # Main app
 def main():
     st.title("CSV Analysis App")
@@ -125,6 +130,14 @@ def main():
         st.subheader("CSV Summary")
         summary_df = generate_csv_summary(df)
         st.table(summary_df)
+        
+        # Add download button for original dataset
+        st.download_button(
+            label="Download original dataset",
+            data=convert_df_to_csv(df),
+            file_name="original_dataset.csv",
+            mime="text/csv",
+        )
         
         st.subheader("Data Preview")
         st.write(df.head())
@@ -144,9 +157,25 @@ def main():
                 st.table(generate_csv_summary(df_true))
                 st.write(df_true.head())
                 
+                # Add download button for rows that meet the condition
+                st.download_button(
+                    label="Download rows that meet the condition",
+                    data=convert_df_to_csv(df_true),
+                    file_name="rows_meet_condition.csv",
+                    mime="text/csv",
+                )
+                
                 st.write("Rows that don't meet the condition:")
                 st.table(generate_csv_summary(df_false))
                 st.write(df_false.head())
+                
+                # Add download button for rows that don't meet the condition
+                st.download_button(
+                    label="Download rows that don't meet the condition",
+                    data=convert_df_to_csv(df_false),
+                    file_name="rows_dont_meet_condition.csv",
+                    mime="text/csv",
+                )
             except ValueError as e:
                 st.error(f"Error: {str(e)}")
 
