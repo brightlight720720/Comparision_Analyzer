@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import io
 from scipy import stats
 from sklearn.utils import resample
+from lifelines import CoxPHFitter
 from lifelines.utils import concordance_index
 
 # Set page title and layout
@@ -15,31 +16,43 @@ st.set_page_config(page_title="CSV Analysis App", layout="wide")
 # Function to compute C-index with confidence interval and p-value
 def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     results = []
-    for col in y_pred.columns:
-        c_index = concordance_index(y_true['Duration'], y_pred[col], y_true['Dead'])
-        
-        # Bootstrap for confidence interval
-        bootstrap_scores = []
-        for _ in range(n_bootstrap):
-            indices = resample(range(len(y_true)))
-            y_true_resampled = y_true.iloc[indices]
-            y_pred_resampled = y_pred[col].iloc[indices]
-            bootstrap_scores.append(concordance_index(y_true_resampled['Duration'], y_pred_resampled, y_true_resampled['Dead']))
-        
-        ci_lower = np.percentile(bootstrap_scores, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_scores, (1 - alpha/2) * 100)
-        
-        # Compute p-value (two-tailed test against null hypothesis of C-index = 0.5)
-        z_score = (c_index - 0.5) / np.std(bootstrap_scores)
-        p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
-        
-        results.append({
-            'column': col,
-            'c_index': c_index,
-            'ci_lower': ci_lower,
-            'ci_upper': ci_upper,
-            'p_value': p_value
-        })
+    
+    # Combine all prediction columns with Duration and Dead
+    df = pd.concat([y_true, y_pred], axis=1)
+    
+    # Fit a Cox Proportional Hazards model
+    cox_model = CoxPHFitter()
+    cox_model.fit(df, duration_col='Duration', event_col='Dead')
+    
+    # Get the risk score (linear predictor) from the model
+    df['risk_score'] = cox_model.predict_partial_hazard(df)
+    
+    # Compute the C-index
+    c_index = concordance_index(df['Duration'], df['risk_score'], df['Dead'])
+    
+    # Bootstrap for confidence interval and p-value
+    bootstrap_scores = []
+    for _ in range(n_bootstrap):
+        indices = resample(range(len(df)))
+        df_resampled = df.iloc[indices]
+        cox_model_boot = CoxPHFitter()
+        cox_model_boot.fit(df_resampled, duration_col='Duration', event_col='Dead')
+        df_resampled['risk_score'] = cox_model_boot.predict_partial_hazard(df_resampled)
+        bootstrap_scores.append(concordance_index(df_resampled['Duration'], df_resampled['risk_score'], df_resampled['Dead']))
+    
+    ci_lower = np.percentile(bootstrap_scores, alpha/2 * 100)
+    ci_upper = np.percentile(bootstrap_scores, (1 - alpha/2) * 100)
+    
+    # Compute p-value (two-tailed test against null hypothesis of C-index = 0.5)
+    z_score = (c_index - 0.5) / np.std(bootstrap_scores)
+    p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
+    
+    results.append({
+        'c_index': c_index,
+        'ci_lower': ci_lower,
+        'ci_upper': ci_upper,
+        'p_value': p_value
+    })
     
     return results
 
@@ -124,65 +137,6 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
     
     return results
 
-# Function to split CSV based on column condition
-def split_csv(dataframe, column_name, condition_value, condition_operator):
-    if condition_operator == "equal to":
-        condition = dataframe[column_name] == condition_value
-    elif condition_operator == "greater than":
-        condition = dataframe[column_name] > condition_value
-    elif condition_operator == "less than":
-        condition = dataframe[column_name] < condition_value
-    else:
-        raise ValueError("Invalid condition operator")
-    
-    df_true = dataframe[condition]
-    df_false = dataframe[~condition]
-    
-    return df_true, df_false
-
-# Modified function to generate CSV summary as a pandas DataFrame
-def generate_csv_summary(dataframe):
-    summary = {
-        'Column': [],
-        'Data Type': [],
-        'Missing Values': [],
-        'Unique Values': [],
-        'Mean': [],
-        'Median': [],
-        'Min': [],
-        'Max': [],
-        'Std': [],
-        'Top 5 Values': []
-    }
-    
-    for column in dataframe.columns:
-        summary['Column'].append(column)
-        summary['Data Type'].append(str(dataframe[column].dtype))
-        summary['Missing Values'].append(dataframe[column].isnull().sum())
-        summary['Unique Values'].append(dataframe[column].nunique())
-        
-        if pd.api.types.is_numeric_dtype(dataframe[column]):
-            summary['Mean'].append(dataframe[column].mean())
-            summary['Median'].append(dataframe[column].median())
-            summary['Min'].append(dataframe[column].min())
-            summary['Max'].append(dataframe[column].max())
-            summary['Std'].append(dataframe[column].std())
-            summary['Top 5 Values'].append('')
-        else:
-            summary['Mean'].append('')
-            summary['Median'].append('')
-            summary['Min'].append('')
-            summary['Max'].append('')
-            summary['Std'].append('')
-            top_5 = dataframe[column].value_counts().nlargest(5).to_dict()
-            summary['Top 5 Values'].append(', '.join([f"{k}: {v}" for k, v in top_5.items()]))
-    
-    return pd.DataFrame(summary)
-
-# Function to convert dataframe to CSV
-def convert_df_to_csv(df):
-    return df.to_csv(index=False).encode('utf-8')
-
 # Main app
 def main():
     st.title("CSV Analysis App")
@@ -196,58 +150,8 @@ def main():
             # Read CSV file
             df = pd.read_csv(uploaded_file)
             
-            # Generate and display CSV summary
-            st.subheader("CSV Summary")
-            summary_df = generate_csv_summary(df)
-            st.table(summary_df)
-            
-            # Add download button for original dataset
-            st.download_button(
-                label="Download original dataset",
-                data=convert_df_to_csv(df),
-                file_name="original_dataset.csv",
-                mime="text/csv",
-            )
-            
             st.subheader("Data Preview")
             st.write(df.head())
-
-            # New section for CSV splitting
-            st.subheader("Split CSV")
-            split_column = st.selectbox("Select column to split on", df.columns)
-            condition_operator = st.selectbox("Select condition operator", ["equal to", "greater than", "less than"])
-            condition_value = st.text_input("Enter condition value")
-
-            if st.button("Split CSV"):
-                try:
-                    condition_value = float(condition_value) if condition_value.replace('.', '').isdigit() else condition_value
-                    df_true, df_false = split_csv(df, split_column, condition_value, condition_operator)
-                    
-                    st.write("Rows that meet the condition:")
-                    st.table(generate_csv_summary(df_true))
-                    st.write(df_true.head())
-                    
-                    # Add download button for rows that meet the condition
-                    st.download_button(
-                        label="Download rows that meet the condition",
-                        data=convert_df_to_csv(df_true),
-                        file_name="rows_meet_condition.csv",
-                        mime="text/csv",
-                    )
-                    
-                    st.write("Rows that don't meet the condition:")
-                    st.table(generate_csv_summary(df_false))
-                    st.write(df_false.head())
-                    
-                    # Add download button for rows that don't meet the condition
-                    st.download_button(
-                        label="Download rows that don't meet the condition",
-                        data=convert_df_to_csv(df_false),
-                        file_name="rows_dont_meet_condition.csv",
-                        mime="text/csv",
-                    )
-                except ValueError as e:
-                    st.error(f"Error: {str(e)}")
 
             # Column selection
             st.subheader("Column Selection")
@@ -258,11 +162,11 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                old_model_columns = st.multiselect("Select the old model predictions columns", df.columns)
+                old_model_columns = st.multiselect("Select the old model columns", df.columns)
                 st.write(f"Old model columns selected: {len(old_model_columns)}")
             
             with col2:
-                new_model_columns = st.multiselect("Select the new model predictions columns", df.columns)
+                new_model_columns = st.multiselect("Select the new model columns", df.columns)
                 st.write(f"New model columns selected: {len(new_model_columns)}")
 
             if st.button("Compute Metrics"):
@@ -285,14 +189,11 @@ def main():
 
                     with col1:
                         st.write("C-index:")
-                        for old_result, new_result in zip(c_index_results_old, c_index_results_new):
-                            old_col = old_result['column']
-                            new_col = new_result['column']
-                            st.write(f"{old_col} vs {new_col}:")
-                            st.write(f"Old model: {old_result['c_index']:.4f} (95% CI: {old_result['ci_lower']:.4f} - {old_result['ci_upper']:.4f}, p-value: {old_result['p_value']:.4f})")
-                            st.write(f"New model: {new_result['c_index']:.4f} (95% CI: {new_result['ci_lower']:.4f} - {new_result['ci_upper']:.4f}, p-value: {new_result['p_value']:.4f})")
-                            st.write(f"Improvement: {new_result['c_index'] - old_result['c_index']:.4f}")
-                            st.write("")
+                        st.write("Old model:")
+                        st.write(f"C-index: {c_index_results_old[0]['c_index']:.4f} (95% CI: {c_index_results_old[0]['ci_lower']:.4f} - {c_index_results_old[0]['ci_upper']:.4f}, p-value: {c_index_results_old[0]['p_value']:.4f})")
+                        st.write("New model:")
+                        st.write(f"C-index: {c_index_results_new[0]['c_index']:.4f} (95% CI: {c_index_results_new[0]['ci_lower']:.4f} - {c_index_results_new[0]['ci_upper']:.4f}, p-value: {c_index_results_new[0]['p_value']:.4f})")
+                        st.write(f"Improvement: {c_index_results_new[0]['c_index'] - c_index_results_old[0]['c_index']:.4f}")
 
                         st.write("Integrated Discrimination Improvement (IDI):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
@@ -324,16 +225,6 @@ def main():
                         
                         ax.plot(fpr_old, tpr_old, label=f'Old Model ({old_col})')
                         ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
-                        
-                        # Add error bars for C-index
-                        ax.errorbar(0.5, c_index_results_old[i]['c_index'], 
-                                    yerr=[[c_index_results_old[i]['c_index'] - c_index_results_old[i]['ci_lower']], 
-                                          [c_index_results_old[i]['ci_upper'] - c_index_results_old[i]['c_index']]], 
-                                    fmt='o', capsize=5, label=f'Old Model CI ({old_col})')
-                        ax.errorbar(0.55, c_index_results_new[i]['c_index'], 
-                                    yerr=[[c_index_results_new[i]['c_index'] - c_index_results_new[i]['ci_lower']], 
-                                          [c_index_results_new[i]['ci_upper'] - c_index_results_new[i]['c_index']]], 
-                                    fmt='o', capsize=5, label=f'New Model CI ({new_col})')
                     
                     ax.set_xlabel('False Positive Rate')
                     ax.set_ylabel('True Positive Rate')
