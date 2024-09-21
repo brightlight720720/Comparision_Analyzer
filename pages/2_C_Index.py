@@ -127,13 +127,14 @@ if uploaded_file is not None:
                 
                 # Visualization of C-index comparison
                 fig, ax = plt.subplots(figsize=(10, 6))
-                error_old = [[0], [0]]
-                error_new = [[max(0, c_index_new - ci_lower)], [max(0, ci_upper - c_index_new)]]
-                ax.bar(['Old Model', 'New Model'], [c_index_old, c_index_new], yerr=[error_old, error_new], capsize=5)
+                x = ['Old Model', 'New Model']
+                y = [c_index_old, c_index_new]
+                yerr = [[0, c_index_new - ci_lower], [0, ci_upper - c_index_new]]  # Asymmetric error bars
+                ax.bar(x, y, yerr=yerr, capsize=5)
                 ax.set_ylabel('C-Index')
                 ax.set_title('C-Index Comparison')
                 ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
-                for i, v in enumerate([c_index_old, c_index_new]):
+                for i, v in enumerate(y):
                     ax.text(i, v, f'{v:.3f}', ha='center', va='bottom')
                 st.pyplot(fig)
                 
