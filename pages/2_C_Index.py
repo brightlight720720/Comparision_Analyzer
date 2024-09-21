@@ -107,7 +107,9 @@ else:
                     
                     # Visualization of C-index comparison
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.bar(['Old Model', 'New Model'], [c_index_old, c_index_new], yerr=[[0, 0], [0, ci_upper-c_index_new]], capsize=5)
+                    error_old = [[0], [0]]
+                    error_new = [[max(0, c_index_new - ci_lower)], [max(0, ci_upper - c_index_new)]]
+                    ax.bar(['Old Model', 'New Model'], [c_index_old, c_index_new], yerr=[error_old, error_new], capsize=5)
                     ax.set_ylabel('C-Index')
                     ax.set_title('C-Index Comparison')
                     ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
