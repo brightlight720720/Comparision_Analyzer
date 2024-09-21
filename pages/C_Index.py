@@ -11,6 +11,25 @@ st.set_page_config(page_title="C-Index - CSV Analysis App", layout="wide")
 
 st.title("C-Index Computation and Comparison")
 
+st.markdown("""
+### What is the C-Index?
+The Concordance Index (C-Index) is a measure of the predictive accuracy of a survival model. It ranges from 0.5 to 1.0, where:
+- 0.5 indicates that the model's predictions are no better than random chance
+- 1.0 indicates perfect prediction
+
+### Interpretation:
+- C-Index > 0.7 is considered good
+- C-Index > 0.8 is considered strong
+- C-Index > 0.9 is considered exceptional
+
+The C-Index represents the probability that, for a randomly selected pair of patients, the patient with the higher predicted risk will experience the event of interest (e.g., death) before the patient with the lower predicted risk.
+
+### Comparing C-Indices:
+When comparing two models:
+- A higher C-Index indicates better predictive performance
+- The difference in C-Indices, along with its confidence interval and p-value, helps determine if the improvement is statistically significant
+""")
+
 def compute_c_index(y_true, y_pred, n_bootstrap=1000):
     df = pd.concat([y_true, y_pred], axis=1)
     
@@ -65,6 +84,16 @@ else:
                 st.write(f"New model C-Index: {c_index_new:.4f}")
                 st.write(f"Difference: {diff:.4f} (95% CI: {ci_lower:.4f} - {ci_upper:.4f})")
                 st.write(f"P-value: {p_value:.4f}")
+                
+                st.markdown("""
+                ### Interpretation of Results:
+                - If the new model's C-Index is higher, it suggests improved predictive performance.
+                - The difference represents the magnitude of improvement.
+                - The 95% Confidence Interval (CI) indicates the range where the true difference likely lies.
+                - The p-value helps determine if the difference is statistically significant:
+                  - p < 0.05 is typically considered statistically significant
+                  - p ≥ 0.05 suggests the difference might be due to chance
+                """)
                 
                 # Visualization of C-index comparison
                 fig, ax = plt.subplots(figsize=(10, 6))

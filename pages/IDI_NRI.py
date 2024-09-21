@@ -9,6 +9,29 @@ st.set_page_config(page_title="IDI/NRI - CSV Analysis App", layout="wide")
 
 st.title("IDI and NRI Computation")
 
+st.markdown("""
+### What are IDI and NRI?
+
+#### Integrated Discrimination Improvement (IDI)
+IDI measures the improvement in prediction performance between two models. It quantifies the difference in discrimination slopes between the new and old models.
+
+- Positive IDI: The new model improves risk prediction
+- Negative IDI: The new model worsens risk prediction
+- IDI = 0: No improvement in risk prediction
+
+#### Net Reclassification Improvement (NRI)
+NRI assesses the improvement in risk classification offered by a new model compared to an old model. It quantifies the net proportion of individuals with and without the event of interest who are correctly reclassified by the new model.
+
+- Positive NRI: The new model improves risk classification
+- Negative NRI: The new model worsens risk classification
+- NRI = 0: No improvement in risk classification
+
+### Interpretation:
+- For both IDI and NRI, larger positive values indicate greater improvement in the new model's predictive performance.
+- The confidence interval (CI) and p-value help determine if the improvement is statistically significant.
+- NRI can be further broken down into NRI for events and non-events, providing insight into how the new model performs for different outcomes.
+""")
+
 def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
     idi = np.mean(y_pred_new - y_pred_old)
     
@@ -111,6 +134,14 @@ else:
                     st.write(f"P-value: {result['p_value']:.4f}")
                     st.write("")
                 
+                st.markdown("""
+                ### Interpretation of IDI Results:
+                - Positive IDI indicates that the new model improves risk prediction compared to the old model.
+                - The magnitude of IDI represents the degree of improvement.
+                - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
+                - A p-value < 0.05 suggests that the improvement is statistically significant.
+                """)
+                
                 st.subheader("NRI Results")
                 for result in nri_results:
                     st.write(f"{result['old_model']} vs {result['new_model']}:")
@@ -119,6 +150,16 @@ else:
                     st.write(f"NRI for non-events: {result['nri_nonevents']:.4f}")
                     st.write(f"P-value: {result['p_value']:.4f}")
                     st.write("")
+                
+                st.markdown("""
+                ### Interpretation of NRI Results:
+                - Positive NRI indicates that the new model improves risk classification compared to the old model.
+                - NRI for events shows the net improvement in classifying individuals who experience the event.
+                - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
+                - The total NRI is the sum of NRI for events and non-events.
+                - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
+                - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
+                """)
                 
                 # Export results
                 idi_df = pd.DataFrame(idi_results)
