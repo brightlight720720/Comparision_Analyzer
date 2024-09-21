@@ -54,7 +54,7 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5):
     
     return nri_values, nri_events_values, nri_nonevents_values
 
-# New function to split CSV based on column condition
+# Function to split CSV based on column condition
 def split_csv(dataframe, column_name, condition_value, condition_operator):
     if condition_operator == "equal to":
         condition = dataframe[column_name] == condition_value
@@ -70,37 +70,44 @@ def split_csv(dataframe, column_name, condition_value, condition_operator):
     
     return df_true, df_false
 
-# New function to generate CSV summary
+# Modified function to generate CSV summary as a pandas DataFrame
 def generate_csv_summary(dataframe):
-    summary = {}
-    summary['num_rows'] = dataframe.shape[0]
-    summary['num_columns'] = dataframe.shape[1]
-    summary['column_info'] = []
+    summary = {
+        'Column': [],
+        'Data Type': [],
+        'Missing Values': [],
+        'Unique Values': [],
+        'Mean': [],
+        'Median': [],
+        'Min': [],
+        'Max': [],
+        'Std': [],
+        'Top 5 Values': []
+    }
     
     for column in dataframe.columns:
-        col_info = {
-            'name': column,
-            'dtype': str(dataframe[column].dtype),
-            'missing_values': dataframe[column].isnull().sum()
-        }
+        summary['Column'].append(column)
+        summary['Data Type'].append(str(dataframe[column].dtype))
+        summary['Missing Values'].append(dataframe[column].isnull().sum())
+        summary['Unique Values'].append(dataframe[column].nunique())
         
         if pd.api.types.is_numeric_dtype(dataframe[column]):
-            col_info.update({
-                'mean': dataframe[column].mean(),
-                'median': dataframe[column].median(),
-                'min': dataframe[column].min(),
-                'max': dataframe[column].max(),
-                'std': dataframe[column].std()
-            })
+            summary['Mean'].append(dataframe[column].mean())
+            summary['Median'].append(dataframe[column].median())
+            summary['Min'].append(dataframe[column].min())
+            summary['Max'].append(dataframe[column].max())
+            summary['Std'].append(dataframe[column].std())
+            summary['Top 5 Values'].append('')
         else:
-            col_info.update({
-                'unique_values': dataframe[column].nunique(),
-                'top_5_values': dataframe[column].value_counts().nlargest(5).to_dict()
-            })
-        
-        summary['column_info'].append(col_info)
+            summary['Mean'].append('')
+            summary['Median'].append('')
+            summary['Min'].append('')
+            summary['Max'].append('')
+            summary['Std'].append('')
+            top_5 = dataframe[column].value_counts().nlargest(5).to_dict()
+            summary['Top 5 Values'].append(', '.join([f"{k}: {v}" for k, v in top_5.items()]))
     
-    return summary
+    return pd.DataFrame(summary)
 
 # Main app
 def main():
@@ -116,26 +123,8 @@ def main():
         
         # Generate and display CSV summary
         st.subheader("CSV Summary")
-        summary = generate_csv_summary(df)
-        st.write(f"Number of rows: {summary['num_rows']}")
-        st.write(f"Number of columns: {summary['num_columns']}")
-        
-        for col_info in summary['column_info']:
-            st.write(f"\nColumn: {col_info['name']}")
-            st.write(f"Data type: {col_info['dtype']}")
-            st.write(f"Missing values: {col_info['missing_values']}")
-            
-            if 'mean' in col_info:
-                st.write(f"Mean: {col_info['mean']:.2f}")
-                st.write(f"Median: {col_info['median']:.2f}")
-                st.write(f"Min: {col_info['min']:.2f}")
-                st.write(f"Max: {col_info['max']:.2f}")
-                st.write(f"Standard deviation: {col_info['std']:.2f}")
-            else:
-                st.write(f"Unique values: {col_info['unique_values']}")
-                st.write("Top 5 most frequent values:")
-                for value, count in col_info['top_5_values'].items():
-                    st.write(f"  {value}: {count}")
+        summary_df = generate_csv_summary(df)
+        st.table(summary_df)
         
         st.subheader("Data Preview")
         st.write(df.head())
@@ -152,14 +141,12 @@ def main():
                 df_true, df_false = split_csv(df, split_column, condition_value, condition_operator)
                 
                 st.write("Rows that meet the condition:")
-                st.write(df_true)
-                st.write("Summary for rows that meet the condition:")
-                st.write(generate_csv_summary(df_true))
+                st.table(generate_csv_summary(df_true))
+                st.write(df_true.head())
                 
                 st.write("Rows that don't meet the condition:")
-                st.write(df_false)
-                st.write("Summary for rows that don't meet the condition:")
-                st.write(generate_csv_summary(df_false))
+                st.table(generate_csv_summary(df_false))
+                st.write(df_false.head())
             except ValueError as e:
                 st.error(f"Error: {str(e)}")
 
