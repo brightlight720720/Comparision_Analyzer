@@ -182,98 +182,108 @@ def main():
 
             # Column selection
             st.subheader("Column Selection")
+            st.write("Please select an equal number of columns for both old and new models.")
+            
             target_column = st.selectbox("Select the target column", df.columns)
-            old_model_columns = st.multiselect("Select the old model predictions columns", df.columns)
-            new_model_columns = st.multiselect("Select the new model predictions columns", df.columns)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                old_model_columns = st.multiselect("Select the old model predictions columns", df.columns)
+                st.write(f"Old model columns selected: {len(old_model_columns)}")
+            
+            with col2:
+                new_model_columns = st.multiselect("Select the new model predictions columns", df.columns)
+                st.write(f"New model columns selected: {len(new_model_columns)}")
 
-            if st.button("Compute Metrics"):
-                if len(old_model_columns) != len(new_model_columns):
-                    st.error("Error: The number of old model columns and new model columns must be the same.")
-                elif not old_model_columns or not new_model_columns:
-                    st.error("Error: Please select at least one column for both old and new model predictions.")
-                else:
-                    try:
-                        # Prepare data
-                        y_true = df[target_column]
-                        y_pred_old = df[old_model_columns]
-                        y_pred_new = df[new_model_columns]
+            # Validation check
+            columns_valid = len(old_model_columns) == len(new_model_columns) and len(old_model_columns) > 0
 
-                        # Compute metrics
-                        with st.spinner("Computing metrics..."):
-                            c_index_old = compute_c_index(y_true, y_pred_old)
-                            c_index_new = compute_c_index(y_true, y_pred_new)
-                            idi_values, mean_old_values, mean_new_values = compute_idi(y_true, y_pred_old, y_pred_new)
-                            nri_values, nri_events_values, nri_nonevents_values = compute_nri(y_true, y_pred_old, y_pred_new)
+            if not columns_valid:
+                st.warning("Please select an equal number of columns for both old and new models, and ensure at least one column is selected for each.")
 
-                        # Display results
-                        st.subheader("Results")
-                        col1, col2 = st.columns(2)
+            if st.button("Compute Metrics", disabled=not columns_valid):
+                try:
+                    # Prepare data
+                    y_true = df[target_column]
+                    y_pred_old = df[old_model_columns]
+                    y_pred_new = df[new_model_columns]
 
-                        with col1:
-                            st.write("C-index (ROC AUC):")
-                            for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                                st.write(f"{old_col} vs {new_col}:")
-                                st.write(f"Old model: {c_index_old[i]:.4f}")
-                                st.write(f"New model: {c_index_new[i]:.4f}")
-                                st.write(f"Improvement: {c_index_new[i] - c_index_old[i]:.4f}")
-                                st.write("")
+                    # Compute metrics
+                    with st.spinner("Computing metrics..."):
+                        c_index_old = compute_c_index(y_true, y_pred_old)
+                        c_index_new = compute_c_index(y_true, y_pred_new)
+                        idi_values, mean_old_values, mean_new_values = compute_idi(y_true, y_pred_old, y_pred_new)
+                        nri_values, nri_events_values, nri_nonevents_values = compute_nri(y_true, y_pred_old, y_pred_new)
 
-                            st.write("Integrated Discrimination Improvement (IDI):")
-                            for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                                st.write(f"{old_col} vs {new_col}:")
-                                st.write(f"IDI: {idi_values[i]:.4f}")
-                                st.write(f"Mean predicted probability (old model): {mean_old_values[i]:.4f}")
-                                st.write(f"Mean predicted probability (new model): {mean_new_values[i]:.4f}")
-                                st.write("")
+                    # Display results
+                    st.subheader("Results")
+                    col1, col2 = st.columns(2)
 
-                        with col2:
-                            st.write("Net Reclassification Improvement (NRI):")
-                            for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                                st.write(f"{old_col} vs {new_col}:")
-                                st.write(f"NRI: {nri_values[i]:.4f}")
-                                st.write(f"NRI for events: {nri_events_values[i]:.4f}")
-                                st.write(f"NRI for non-events: {nri_nonevents_values[i]:.4f}")
-                                st.write("")
-
-                        # Visualizations
-                        st.subheader("Visualizations")
-                        
-                        # ROC curve
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.plot([0, 1], [0, 1], linestyle='--', label='Random Classifier')
-                        
+                    with col1:
+                        st.write("C-index (ROC AUC):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                            fpr_old, tpr_old, _ = roc_curve(y_true, y_pred_old[old_col])
-                            fpr_new, tpr_new, _ = roc_curve(y_true, y_pred_new[new_col])
-                            
-                            ax.plot(fpr_old, tpr_old, label=f'Old Model ({old_col})')
-                            ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
-                        
-                        ax.set_xlabel('False Positive Rate')
-                        ax.set_ylabel('True Positive Rate')
-                        ax.set_title('Receiver Operating Characteristic (ROC) Curve')
-                        ax.legend()
-                        st.pyplot(fig)
+                            st.write(f"{old_col} vs {new_col}:")
+                            st.write(f"Old model: {c_index_old[i]:.4f}")
+                            st.write(f"New model: {c_index_new[i]:.4f}")
+                            st.write(f"Improvement: {c_index_new[i] - c_index_old[i]:.4f}")
+                            st.write("")
 
-                        # Calibration plot
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.plot([0, 1], [0, 1], linestyle='--', label='Perfectly Calibrated')
-                        
+                        st.write("Integrated Discrimination Improvement (IDI):")
                         for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                            prob_true_old, prob_pred_old = calibration_curve(y_true, y_pred_old[old_col], n_bins=10)
-                            prob_true_new, prob_pred_new = calibration_curve(y_true, y_pred_new[new_col], n_bins=10)
-                            
-                            ax.plot(prob_pred_old, prob_true_old, marker='o', label=f'Old Model ({old_col})')
-                            ax.plot(prob_pred_new, prob_true_new, marker='o', label=f'New Model ({new_col})')
-                        
-                        ax.set_xlabel('Mean Predicted Probability')
-                        ax.set_ylabel('Fraction of Positives')
-                        ax.set_title('Calibration Plot')
-                        ax.legend()
-                        st.pyplot(fig)
+                            st.write(f"{old_col} vs {new_col}:")
+                            st.write(f"IDI: {idi_values[i]:.4f}")
+                            st.write(f"Mean predicted probability (old model): {mean_old_values[i]:.4f}")
+                            st.write(f"Mean predicted probability (new model): {mean_new_values[i]:.4f}")
+                            st.write("")
 
-                    except Exception as e:
-                        st.error(f"An error occurred while computing metrics: {str(e)}")
+                    with col2:
+                        st.write("Net Reclassification Improvement (NRI):")
+                        for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+                            st.write(f"{old_col} vs {new_col}:")
+                            st.write(f"NRI: {nri_values[i]:.4f}")
+                            st.write(f"NRI for events: {nri_events_values[i]:.4f}")
+                            st.write(f"NRI for non-events: {nri_nonevents_values[i]:.4f}")
+                            st.write("")
+
+                    # Visualizations
+                    st.subheader("Visualizations")
+                    
+                    # ROC curve
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.plot([0, 1], [0, 1], linestyle='--', label='Random Classifier')
+                    
+                    for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+                        fpr_old, tpr_old, _ = roc_curve(y_true, y_pred_old[old_col])
+                        fpr_new, tpr_new, _ = roc_curve(y_true, y_pred_new[new_col])
+                        
+                        ax.plot(fpr_old, tpr_old, label=f'Old Model ({old_col})')
+                        ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
+                    
+                    ax.set_xlabel('False Positive Rate')
+                    ax.set_ylabel('True Positive Rate')
+                    ax.set_title('Receiver Operating Characteristic (ROC) Curve')
+                    ax.legend()
+                    st.pyplot(fig)
+
+                    # Calibration plot
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.plot([0, 1], [0, 1], linestyle='--', label='Perfectly Calibrated')
+                    
+                    for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
+                        prob_true_old, prob_pred_old = calibration_curve(y_true, y_pred_old[old_col], n_bins=10)
+                        prob_true_new, prob_pred_new = calibration_curve(y_true, y_pred_new[new_col], n_bins=10)
+                        
+                        ax.plot(prob_pred_old, prob_true_old, marker='o', label=f'Old Model ({old_col})')
+                        ax.plot(prob_pred_new, prob_true_new, marker='o', label=f'New Model ({new_col})')
+                    
+                    ax.set_xlabel('Mean Predicted Probability')
+                    ax.set_ylabel('Fraction of Positives')
+                    ax.set_title('Calibration Plot')
+                    ax.legend()
+                    st.pyplot(fig)
+
+                except Exception as e:
+                    st.error(f"An error occurred while computing metrics: {str(e)}")
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV file: {str(e)}")
