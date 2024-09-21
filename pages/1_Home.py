@@ -7,6 +7,9 @@ st.set_page_config(page_title="Home - Multi-format Analysis App", layout="wide")
 
 st.title("Home - Multi-format Analysis App")
 
+st.write("Welcome to the Multi-format Analysis App. This application allows you to upload CSV, Excel, or JSON files and perform various statistical analyses.")
+st.write("Please upload your file and proceed to the C-Index and IDI/NRI pages for column selection and analysis.")
+
 # File upload
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
 
@@ -115,31 +118,6 @@ if uploaded_file is not None:
                         )
                 except ValueError:
                     st.error("Invalid split value. Please enter a numeric value or 'median'/'mean'.")
-            
-            # Clear instructions for column selection
-            st.subheader("Column Selection")
-            st.write("Please select the columns for your analysis:")
-            
-            duration_column = st.selectbox("Select the Duration column", df.columns)
-            dead_column = st.selectbox("Select the Dead column", df.columns)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                old_model_columns = st.multiselect("Select the old model columns", df.columns)
-            with col2:
-                new_model_columns = st.multiselect("Select the new model columns", df.columns)
-            
-            # Visual indicators for the number of columns selected for each model
-            st.write(f"Old model columns selected: {len(old_model_columns)}")
-            st.write(f"New model columns selected: {len(new_model_columns)}")
-            
-            # Save column selections to session state
-            if st.button("Save Column Selections"):
-                st.session_state.duration_column = duration_column
-                st.session_state.dead_column = dead_column
-                st.session_state.old_model_columns = old_model_columns
-                st.session_state.new_model_columns = new_model_columns
-                st.success("Column selections saved. You can now proceed to the C-Index and IDI/NRI pages for analysis.")
         
     except Exception as e:
         st.error(f"An error occurred while processing the file: {str(e)}")
