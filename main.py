@@ -70,6 +70,38 @@ def split_csv(dataframe, column_name, condition_value, condition_operator):
     
     return df_true, df_false
 
+# New function to generate CSV summary
+def generate_csv_summary(dataframe):
+    summary = {}
+    summary['num_rows'] = dataframe.shape[0]
+    summary['num_columns'] = dataframe.shape[1]
+    summary['column_info'] = []
+    
+    for column in dataframe.columns:
+        col_info = {
+            'name': column,
+            'dtype': str(dataframe[column].dtype),
+            'missing_values': dataframe[column].isnull().sum()
+        }
+        
+        if pd.api.types.is_numeric_dtype(dataframe[column]):
+            col_info.update({
+                'mean': dataframe[column].mean(),
+                'median': dataframe[column].median(),
+                'min': dataframe[column].min(),
+                'max': dataframe[column].max(),
+                'std': dataframe[column].std()
+            })
+        else:
+            col_info.update({
+                'unique_values': dataframe[column].nunique(),
+                'top_5_values': dataframe[column].value_counts().nlargest(5).to_dict()
+            })
+        
+        summary['column_info'].append(col_info)
+    
+    return summary
+
 # Main app
 def main():
     st.title("CSV Analysis App")
@@ -81,7 +113,31 @@ def main():
     if uploaded_file is not None:
         # Read CSV file
         df = pd.read_csv(uploaded_file)
-        st.write("Data Preview:")
+        
+        # Generate and display CSV summary
+        st.subheader("CSV Summary")
+        summary = generate_csv_summary(df)
+        st.write(f"Number of rows: {summary['num_rows']}")
+        st.write(f"Number of columns: {summary['num_columns']}")
+        
+        for col_info in summary['column_info']:
+            st.write(f"\nColumn: {col_info['name']}")
+            st.write(f"Data type: {col_info['dtype']}")
+            st.write(f"Missing values: {col_info['missing_values']}")
+            
+            if 'mean' in col_info:
+                st.write(f"Mean: {col_info['mean']:.2f}")
+                st.write(f"Median: {col_info['median']:.2f}")
+                st.write(f"Min: {col_info['min']:.2f}")
+                st.write(f"Max: {col_info['max']:.2f}")
+                st.write(f"Standard deviation: {col_info['std']:.2f}")
+            else:
+                st.write(f"Unique values: {col_info['unique_values']}")
+                st.write("Top 5 most frequent values:")
+                for value, count in col_info['top_5_values'].items():
+                    st.write(f"  {value}: {count}")
+        
+        st.subheader("Data Preview")
         st.write(df.head())
 
         # New section for CSV splitting
@@ -97,9 +153,13 @@ def main():
                 
                 st.write("Rows that meet the condition:")
                 st.write(df_true)
+                st.write("Summary for rows that meet the condition:")
+                st.write(generate_csv_summary(df_true))
                 
                 st.write("Rows that don't meet the condition:")
                 st.write(df_false)
+                st.write("Summary for rows that don't meet the condition:")
+                st.write(generate_csv_summary(df_false))
             except ValueError as e:
                 st.error(f"Error: {str(e)}")
 
