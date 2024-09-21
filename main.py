@@ -1,17 +1,22 @@
 import streamlit as st
 
-st.set_page_config(page_title="CSV Analysis App", layout="wide")
+st.set_page_config(page_title="Multi-format Analysis App", layout="wide")
 
-st.title("CSV Analysis App")
-st.write("Welcome to the CSV Analysis App. This application allows you to upload a CSV file and perform various statistical analyses.")
+st.title("Multi-format Analysis App")
+st.write("Welcome to the Multi-format Analysis App. This application allows you to upload CSV, Excel, or JSON files and perform various statistical analyses.")
 
 st.markdown("""
 ### Instructions:
 1. Use the sidebar to navigate between different pages.
-2. Start by uploading your CSV file on the Home page.
+2. Start by uploading your CSV, Excel, or JSON file on the Home page.
 3. Select the required columns for analysis on the Home page.
 4. Perform C-index computations on the C-Index page.
 5. Calculate IDI and NRI on the IDI/NRI page.
+
+### Supported File Formats:
+- CSV (.csv)
+- Excel (.xlsx)
+- JSON (.json)
 
 ### Overview of Metrics:
 
@@ -25,7 +30,7 @@ IDI quantifies the improvement in prediction performance between two models. A p
 NRI assesses the improvement in risk classification offered by a new model compared to an old model. A positive NRI suggests that the new model improves risk classification.
 
 ### Navigation:
-- **Home**: Upload CSV, preview data, split dataset, and select columns
+- **Home**: Upload file (CSV, Excel, or JSON), preview data, split dataset, and select columns
 - **C-Index**: Compute and compare C-index for old and new models
 - **IDI/NRI**: Calculate Integrated Discrimination Improvement and Net Reclassification Improvement
 
