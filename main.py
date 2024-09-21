@@ -7,8 +7,9 @@ import matplotlib.pyplot as plt
 import io
 from scipy import stats
 from sklearn.utils import resample
-from lifelines import CoxPHFitter
+from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.utils import concordance_index
+import seaborn as sns
 
 # Set page title and layout
 st.set_page_config(page_title="CSV Analysis App", layout="wide")
@@ -137,10 +138,52 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
     
     return results
 
+def plot_kaplan_meier(df, duration_col, event_col):
+    kmf = KaplanMeierFitter()
+    kmf.fit(df[duration_col], df[event_col], label="Kaplan-Meier Estimate")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    kmf.plot(ax=ax)
+    ax.set_title('Kaplan-Meier Survival Curve')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Survival Probability')
+    return fig
+
+def plot_cox_summary(df, duration_col, event_col, covariates):
+    cph = CoxPHFitter()
+    cph.fit(df[[duration_col, event_col] + covariates], duration_col=duration_col, event_col=event_col)
+    
+    summary = cph.summary
+    fig, ax = plt.subplots(figsize=(12, len(covariates) * 0.5))
+    sns.heatmap(summary[['exp(coef)', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'p']].sort_values(by='exp(coef)'), 
+                annot=True, fmt='.3f', cmap='coolwarm', center=1, ax=ax)
+    ax.set_title('Cox Proportional Hazards Model Summary')
+    return fig
+
+def plot_hazard_ratio_forest(df, duration_col, event_col, covariates):
+    cph = CoxPHFitter()
+    cph.fit(df[[duration_col, event_col] + covariates], duration_col=duration_col, event_col=event_col)
+    
+    summary = cph.summary.sort_values(by='exp(coef)')
+    fig, ax = plt.subplots(figsize=(10, len(covariates) * 0.5))
+    
+    y_pos = range(len(summary))
+    ax.errorbar(summary['exp(coef)'], y_pos, xerr=[summary['exp(coef)'] - summary['exp(coef) lower 95%'], 
+                                                   summary['exp(coef) upper 95%'] - summary['exp(coef)']],
+                fmt='o', capsize=5, capthick=2, ecolor='gray')
+    
+    ax.axvline(x=1, color='r', linestyle='--')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(summary.index)
+    ax.set_xlabel('Hazard Ratio (95% CI)')
+    ax.set_title('Hazard Ratio Forest Plot')
+    
+    return fig
+
 # Main app
 def main():
     st.title("CSV Analysis App")
-    st.write("Upload a CSV file, select columns, and compute C index, IDI, and NRI")
+    st.write("Upload a CSV file, select columns, and compute advanced statistical analyses")
 
     # File upload
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
@@ -169,7 +212,7 @@ def main():
                 new_model_columns = st.multiselect("Select the new model columns", df.columns)
                 st.write(f"New model columns selected: {len(new_model_columns)}")
 
-            if st.button("Compute Metrics"):
+            if st.button("Compute Metrics and Visualizations"):
                 try:
                     # Prepare data
                     y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
@@ -177,7 +220,7 @@ def main():
                     y_pred_new = df[new_model_columns]
 
                     # Compute metrics
-                    with st.spinner("Computing metrics..."):
+                    with st.spinner("Computing metrics and generating visualizations..."):
                         c_index_results_old = compute_c_index(y_true, y_pred_old)
                         c_index_results_new = compute_c_index(y_true, y_pred_new)
                         idi_results = compute_idi(y_true['Dead'], y_pred_old, y_pred_new)
@@ -248,6 +291,21 @@ def main():
                     ax.set_title('Calibration Plot')
                     ax.legend()
                     st.pyplot(fig)
+
+                    # New visualizations
+                    st.subheader("Advanced Statistical Analyses")
+
+                    # Kaplan-Meier survival curve
+                    km_fig = plot_kaplan_meier(df, duration_column, dead_column)
+                    st.pyplot(km_fig)
+
+                    # Cox Proportional Hazards model summary
+                    cox_summary_fig = plot_cox_summary(df, duration_column, dead_column, new_model_columns)
+                    st.pyplot(cox_summary_fig)
+
+                    # Hazard ratio forest plot
+                    hr_forest_fig = plot_hazard_ratio_forest(df, duration_column, dead_column, new_model_columns)
+                    st.pyplot(hr_forest_fig)
 
                 except Exception as e:
                     st.error(f"An error occurred while computing metrics: {str(e)}")
