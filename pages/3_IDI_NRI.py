@@ -85,139 +85,156 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
     
     return nri, nri_events, nri_nonevents, ci_lower, ci_upper, p_value
 
-if 'duration_column' not in st.session_state or 'dead_column' not in st.session_state or 'old_model_columns' not in st.session_state or 'new_model_columns' not in st.session_state:
-    st.warning("Please select columns on the Home page before proceeding with IDI/NRI computation.")
-else:
-    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
-    
-    if uploaded_file is not None:
-        try:
-            file_extension = uploaded_file.name.split(".")[-1].lower()
-            if file_extension == "csv":
-                df = pd.read_csv(uploaded_file)
-            elif file_extension == "xlsx":
-                df = pd.read_excel(uploaded_file, engine="openpyxl")
-            elif file_extension == "json":
-                df = pd.read_json(uploaded_file)
+# File upload section
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
+
+if uploaded_file is not None:
+    try:
+        file_extension = uploaded_file.name.split(".")[-1].lower()
+        if file_extension == "csv":
+            df = pd.read_csv(uploaded_file)
+        elif file_extension == "xlsx":
+            df = pd.read_excel(uploaded_file, engine="openpyxl")
+        elif file_extension == "json":
+            df = pd.read_json(uploaded_file)
+        else:
+            st.error("Unsupported file format. Please upload a CSV, Excel, or JSON file.")
+            df = None
+    except Exception as e:
+        st.error(f"An error occurred while reading the file: {str(e)}")
+        df = None
+
+    if df is not None:
+        # Column selection section
+        st.subheader("Column Selection")
+        dead_column = st.selectbox("Select the Dead column", df.columns)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            old_model_columns = st.multiselect("Select the old model columns", df.columns)
+        with col2:
+            new_model_columns = st.multiselect("Select the new model columns", df.columns)
+        
+        # Visual indicators for the number of columns selected for each model
+        st.write(f"Old model columns selected: {len(old_model_columns)}")
+        st.write(f"New model columns selected: {len(new_model_columns)}")
+
+        if st.button("Compute IDI and NRI"):
+            if len(old_model_columns) == 0 or len(new_model_columns) == 0:
+                st.error("Please select at least one column for both old and new models.")
+            elif len(old_model_columns) != len(new_model_columns):
+                st.error("The number of columns for old and new models must be the same.")
             else:
-                st.error("Unsupported file format. Please upload a CSV, Excel, or JSON file.")
-                df = None
-            
-            if df is not None:
-                y_true = df[st.session_state.dead_column]
-                y_pred_old = df[st.session_state.old_model_columns]
-                y_pred_new = df[st.session_state.new_model_columns]
-                
-                if st.button("Compute IDI and NRI"):
-                    with st.spinner("Computing IDI and NRI..."):
-                        idi_results = []
-                        nri_results = []
+                with st.spinner("Computing IDI and NRI..."):
+                    y_true = df[dead_column]
+                    y_pred_old = df[old_model_columns]
+                    y_pred_new = df[new_model_columns]
+                    
+                    idi_results = []
+                    nri_results = []
+                    
+                    for old_col, new_col in zip(old_model_columns, new_model_columns):
+                        idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old[old_col], y_pred_new[new_col])
+                        nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old[old_col], y_pred_new[new_col])
                         
-                        for old_col, new_col in zip(st.session_state.old_model_columns, st.session_state.new_model_columns):
-                            idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old[old_col], y_pred_new[new_col])
-                            nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old[old_col], y_pred_new[new_col])
-                            
-                            idi_results.append({
-                                'old_model': old_col,
-                                'new_model': new_col,
-                                'idi': idi,
-                                'ci_lower': idi_ci_lower,
-                                'ci_upper': idi_ci_upper,
-                                'p_value': idi_p_value
-                            })
-                            
-                            nri_results.append({
-                                'old_model': old_col,
-                                'new_model': new_col,
-                                'nri': nri,
-                                'nri_events': nri_events,
-                                'nri_nonevents': nri_nonevents,
-                                'ci_lower': nri_ci_lower,
-                                'ci_upper': nri_ci_upper,
-                                'p_value': nri_p_value
-                            })
-                    
-                    st.subheader("IDI Results")
-                    for result in idi_results:
-                        st.write(f"{result['old_model']} vs {result['new_model']}:")
-                        st.write(f"IDI: {result['idi']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
-                        st.write(f"P-value: {result['p_value']:.4f}")
-                        st.write("")
-                    
-                    st.markdown("""
-                    ### Interpretation of IDI Results:
-                    - Positive IDI indicates that the new model improves risk prediction compared to the old model.
-                    - The magnitude of IDI represents the degree of improvement.
-                    - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
-                    - A p-value < 0.05 suggests that the improvement is statistically significant.
-                    """)
-                    
-                    st.subheader("NRI Results")
-                    for result in nri_results:
-                        st.write(f"{result['old_model']} vs {result['new_model']}:")
-                        st.write(f"NRI: {result['nri']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
-                        st.write(f"NRI for events: {result['nri_events']:.4f}")
-                        st.write(f"NRI for non-events: {result['nri_nonevents']:.4f}")
-                        st.write(f"P-value: {result['p_value']:.4f}")
-                        st.write("")
-                    
-                    st.markdown("""
-                    ### Interpretation of NRI Results:
-                    - Positive NRI indicates that the new model improves risk classification compared to the old model.
-                    - NRI for events shows the net improvement in classifying individuals who experience the event.
-                    - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
-                    - The total NRI is the sum of NRI for events and non-events.
-                    - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
-                    - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
-                    """)
-                    
-                    # Export results
-                    idi_df = pd.DataFrame(idi_results)
-                    nri_df = pd.DataFrame(nri_results)
-                    
-                    results_df = pd.concat([idi_df, nri_df], axis=1, keys=['IDI', 'NRI'])
-                    csv = results_df.to_csv(index=False)
-                    st.download_button(
-                        label="Download IDI/NRI Results",
-                        data=csv,
-                        file_name="idi_nri_results.csv",
-                        mime="text/csv",
-                    )
-                    
-                    # Visualization
-                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-                    
-                    # IDI plot
-                    ax1.bar(range(len(idi_results)), [r['idi'] for r in idi_results], yerr=[[r['idi']-r['ci_lower'] for r in idi_results], [r['ci_upper']-r['idi'] for r in idi_results]], capsize=5)
-                    ax1.set_xlabel('Model Comparison')
-                    ax1.set_ylabel('IDI')
-                    ax1.set_title('Integrated Discrimination Improvement (IDI)')
-                    ax1.set_xticks(range(len(idi_results)))
-                    ax1.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in idi_results], rotation=45, ha='right')
-                    
-                    # NRI plot
-                    ax2.bar(range(len(nri_results)), [r['nri'] for r in nri_results], yerr=[[r['nri']-r['ci_lower'] for r in nri_results], [r['ci_upper']-r['nri'] for r in nri_results]], capsize=5)
-                    ax2.set_xlabel('Model Comparison')
-                    ax2.set_ylabel('NRI')
-                    ax2.set_title('Net Reclassification Improvement (NRI)')
-                    ax2.set_xticks(range(len(nri_results)))
-                    ax2.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in nri_results], rotation=45, ha='right')
-                    
-                    plt.tight_layout()
-                    st.pyplot(fig)
-                    
-                    # Export plot
-                    img_buffer = io.BytesIO()
-                    plt.savefig(img_buffer, format='png')
-                    img_buffer.seek(0)
-                    st.download_button(
-                        label="Download IDI/NRI Plot",
-                        data=img_buffer,
-                        file_name="idi_nri_plot.png",
-                        mime="image/png",
-                    )
-                    
-        except Exception as e:
-            st.error(f"An error occurred while computing IDI and NRI: {str(e)}")
-    else:
-        st.info("Please upload a file to compute IDI and NRI.")
+                        idi_results.append({
+                            'old_model': old_col,
+                            'new_model': new_col,
+                            'idi': idi,
+                            'ci_lower': idi_ci_lower,
+                            'ci_upper': idi_ci_upper,
+                            'p_value': idi_p_value
+                        })
+                        
+                        nri_results.append({
+                            'old_model': old_col,
+                            'new_model': new_col,
+                            'nri': nri,
+                            'nri_events': nri_events,
+                            'nri_nonevents': nri_nonevents,
+                            'ci_lower': nri_ci_lower,
+                            'ci_upper': nri_ci_upper,
+                            'p_value': nri_p_value
+                        })
+                
+                st.subheader("IDI Results")
+                for result in idi_results:
+                    st.write(f"{result['old_model']} vs {result['new_model']}:")
+                    st.write(f"IDI: {result['idi']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
+                    st.write(f"P-value: {result['p_value']:.4f}")
+                    st.write("")
+                
+                st.markdown("""
+                ### Interpretation of IDI Results:
+                - Positive IDI indicates that the new model improves risk prediction compared to the old model.
+                - The magnitude of IDI represents the degree of improvement.
+                - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
+                - A p-value < 0.05 suggests that the improvement is statistically significant.
+                """)
+                
+                st.subheader("NRI Results")
+                for result in nri_results:
+                    st.write(f"{result['old_model']} vs {result['new_model']}:")
+                    st.write(f"NRI: {result['nri']:.4f} (95% CI: {result['ci_lower']:.4f} - {result['ci_upper']:.4f})")
+                    st.write(f"NRI for events: {result['nri_events']:.4f}")
+                    st.write(f"NRI for non-events: {result['nri_nonevents']:.4f}")
+                    st.write(f"P-value: {result['p_value']:.4f}")
+                    st.write("")
+                
+                st.markdown("""
+                ### Interpretation of NRI Results:
+                - Positive NRI indicates that the new model improves risk classification compared to the old model.
+                - NRI for events shows the net improvement in classifying individuals who experience the event.
+                - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
+                - The total NRI is the sum of NRI for events and non-events.
+                - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
+                - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
+                """)
+                
+                # Export results
+                idi_df = pd.DataFrame(idi_results)
+                nri_df = pd.DataFrame(nri_results)
+                
+                results_df = pd.concat([idi_df, nri_df], axis=1, keys=['IDI', 'NRI'])
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    label="Download IDI/NRI Results",
+                    data=csv,
+                    file_name="idi_nri_results.csv",
+                    mime="text/csv",
+                )
+                
+                # Visualization
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+                
+                # IDI plot
+                ax1.bar(range(len(idi_results)), [r['idi'] for r in idi_results], yerr=[[r['idi']-r['ci_lower'] for r in idi_results], [r['ci_upper']-r['idi'] for r in idi_results]], capsize=5)
+                ax1.set_xlabel('Model Comparison')
+                ax1.set_ylabel('IDI')
+                ax1.set_title('Integrated Discrimination Improvement (IDI)')
+                ax1.set_xticks(range(len(idi_results)))
+                ax1.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in idi_results], rotation=45, ha='right')
+                
+                # NRI plot
+                ax2.bar(range(len(nri_results)), [r['nri'] for r in nri_results], yerr=[[r['nri']-r['ci_lower'] for r in nri_results], [r['ci_upper']-r['nri'] for r in nri_results]], capsize=5)
+                ax2.set_xlabel('Model Comparison')
+                ax2.set_ylabel('NRI')
+                ax2.set_title('Net Reclassification Improvement (NRI)')
+                ax2.set_xticks(range(len(nri_results)))
+                ax2.set_xticklabels([f"{r['old_model']} vs {r['new_model']}" for r in nri_results], rotation=45, ha='right')
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Export plot
+                img_buffer = io.BytesIO()
+                plt.savefig(img_buffer, format='png')
+                img_buffer.seek(0)
+                st.download_button(
+                    label="Download IDI/NRI Plot",
+                    data=img_buffer,
+                    file_name="idi_nri_plot.png",
+                    mime="image/png",
+                )
+else:
+    st.info("Please upload a CSV, Excel, or JSON file to begin the analysis.")
