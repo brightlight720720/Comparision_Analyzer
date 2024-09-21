@@ -62,6 +62,12 @@ def compare_c_index(c_index_old, c_index_new, n_bootstrap=1000, alpha=0.05):
 if 'duration_column' not in st.session_state or 'dead_column' not in st.session_state or 'old_model_columns' not in st.session_state or 'new_model_columns' not in st.session_state:
     st.warning("Please select columns on the Home page before proceeding with C-Index computation.")
 else:
+    # Use the column selections from the session state
+    duration_column = st.session_state.duration_column
+    dead_column = st.session_state.dead_column
+    old_model_columns = st.session_state.old_model_columns
+    new_model_columns = st.session_state.new_model_columns
+
     uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
     
     if uploaded_file is not None:
@@ -78,9 +84,9 @@ else:
                 df = None
             
             if df is not None:
-                y_true = df[[st.session_state.duration_column, st.session_state.dead_column]].rename(columns={st.session_state.duration_column: 'Duration', st.session_state.dead_column: 'Dead'})
-                y_pred_old = df[st.session_state.old_model_columns]
-                y_pred_new = df[st.session_state.new_model_columns]
+                y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
+                y_pred_old = df[old_model_columns]
+                y_pred_new = df[new_model_columns]
                 
                 if st.button("Compute C-Index"):
                     with st.spinner("Computing C-Index..."):
