@@ -1,36 +1,35 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_curve
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
 import io
 from scipy import stats
 from sklearn.utils import resample
+from lifelines.utils import concordance_index
 
 # Set page title and layout
 st.set_page_config(page_title="CSV Analysis App", layout="wide")
 
-# Function to compute C-index (ROC AUC) with confidence interval and p-value
+# Function to compute C-index with confidence interval and p-value
 def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
     results = []
     for col in y_pred.columns:
-        c_index = roc_auc_score(y_true, y_pred[col])
-        
-        # Debug logging
-        print(f"Computing C-index for column: {col}")
-        print(f"C-index value: {c_index}")
+        c_index = concordance_index(y_true['Duration'], y_pred[col], y_true['Dead'])
         
         # Bootstrap for confidence interval
         bootstrap_scores = []
         for _ in range(n_bootstrap):
-            y_true_resampled, y_pred_resampled = resample(y_true, y_pred[col])
-            bootstrap_scores.append(roc_auc_score(y_true_resampled, y_pred_resampled))
+            indices = resample(range(len(y_true)))
+            y_true_resampled = y_true.iloc[indices]
+            y_pred_resampled = y_pred[col].iloc[indices]
+            bootstrap_scores.append(concordance_index(y_true_resampled['Duration'], y_pred_resampled, y_true_resampled['Dead']))
         
         ci_lower = np.percentile(bootstrap_scores, alpha/2 * 100)
         ci_upper = np.percentile(bootstrap_scores, (1 - alpha/2) * 100)
         
-        # Compute p-value (two-tailed test against null hypothesis of AUC = 0.5)
+        # Compute p-value (two-tailed test against null hypothesis of C-index = 0.5)
         z_score = (c_index - 0.5) / np.std(bootstrap_scores)
         p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
         
@@ -41,13 +40,6 @@ def compute_c_index(y_true, y_pred, n_bootstrap=1000, alpha=0.05):
             'ci_upper': ci_upper,
             'p_value': p_value
         })
-        
-        # Debug logging
-        print(f"Results for column {col}:")
-        print(f"C-index: {c_index:.4f}")
-        print(f"95% CI: ({ci_lower:.4f} - {ci_upper:.4f})")
-        print(f"p-value: {p_value:.4f}")
-        print("---")
     
     return results
 
@@ -259,9 +251,10 @@ def main():
 
             # Column selection
             st.subheader("Column Selection")
-            st.write("Please select an equal number of columns for both old and new models.")
+            st.write("Please select the required columns for analysis.")
             
-            target_column = st.selectbox("Select the target column", df.columns)
+            duration_column = st.selectbox("Select the Duration column", df.columns)
+            dead_column = st.selectbox("Select the Dead column", df.columns)
             
             col1, col2 = st.columns(2)
             with col1:
@@ -275,7 +268,7 @@ def main():
             if st.button("Compute Metrics"):
                 try:
                     # Prepare data
-                    y_true = df[target_column]
+                    y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
                     y_pred_old = df[old_model_columns]
                     y_pred_new = df[new_model_columns]
 
@@ -283,15 +276,15 @@ def main():
                     with st.spinner("Computing metrics..."):
                         c_index_results_old = compute_c_index(y_true, y_pred_old)
                         c_index_results_new = compute_c_index(y_true, y_pred_new)
-                        idi_results = compute_idi(y_true, y_pred_old, y_pred_new)
-                        nri_results = compute_nri(y_true, y_pred_old, y_pred_new)
+                        idi_results = compute_idi(y_true['Dead'], y_pred_old, y_pred_new)
+                        nri_results = compute_nri(y_true['Dead'], y_pred_old, y_pred_new)
 
                     # Display results
                     st.subheader("Results")
                     col1, col2 = st.columns(2)
 
                     with col1:
-                        st.write("C-index (ROC AUC):")
+                        st.write("C-index:")
                         for old_result, new_result in zip(c_index_results_old, c_index_results_new):
                             old_col = old_result['column']
                             new_col = new_result['column']
@@ -326,8 +319,8 @@ def main():
                     ax.plot([0, 1], [0, 1], linestyle='--', label='Random Classifier')
                     
                     for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                        fpr_old, tpr_old, _ = roc_curve(y_true, y_pred_old[old_col])
-                        fpr_new, tpr_new, _ = roc_curve(y_true, y_pred_new[new_col])
+                        fpr_old, tpr_old, _ = roc_curve(y_true['Dead'], y_pred_old[old_col])
+                        fpr_new, tpr_new, _ = roc_curve(y_true['Dead'], y_pred_new[new_col])
                         
                         ax.plot(fpr_old, tpr_old, label=f'Old Model ({old_col})')
                         ax.plot(fpr_new, tpr_new, label=f'New Model ({new_col})')
@@ -353,8 +346,8 @@ def main():
                     ax.plot([0, 1], [0, 1], linestyle='--', label='Perfectly Calibrated')
                     
                     for i, (old_col, new_col) in enumerate(zip(old_model_columns, new_model_columns)):
-                        prob_true_old, prob_pred_old = calibration_curve(y_true, y_pred_old[old_col], n_bins=10)
-                        prob_true_new, prob_pred_new = calibration_curve(y_true, y_pred_new[new_col], n_bins=10)
+                        prob_true_old, prob_pred_old = calibration_curve(y_true['Dead'], y_pred_old[old_col], n_bins=10)
+                        prob_true_new, prob_pred_new = calibration_curve(y_true['Dead'], y_pred_new[new_col], n_bins=10)
                         
                         ax.plot(prob_pred_old, prob_true_old, marker='o', label=f'Old Model ({old_col})')
                         ax.plot(prob_pred_new, prob_true_new, marker='o', label=f'New Model ({new_col})')
