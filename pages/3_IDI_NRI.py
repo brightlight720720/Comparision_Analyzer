@@ -45,7 +45,7 @@ def app():
 
     ### Interpretation:
     - For both IDI and NRI, larger positive values indicate greater improvement in the new model's predictive performance.
-    - The confidence interval (CI) and p-value help determine if the improvement is statistically significant.
+    - The confidence interval (CI) helps determine if the improvement is statistically significant.
     - NRI can be further broken down into NRI for events and non-events, providing insight into how the new model performs for different outcomes.
     """)
 
@@ -123,13 +123,9 @@ def app():
         nri_ci = np.percentile(nri_values, [2.5, 97.5])
         idi_ci = np.percentile(idi_values, [2.5, 97.5])
         
-        # Calculate p-value (two-tailed test)
-        nri_p_value = min(np.mean(nri_values >= nri_original), np.mean(nri_values <= nri_original)) * 2
-        idi_p_value = min(np.mean(idi_values >= idi_original), np.mean(idi_values <= idi_original)) * 2
-        
         return {
-            'nri_original': nri_original, 'nri_ci': nri_ci, 'nri_p_value': nri_p_value,
-            'idi_original': idi_original, 'idi_ci': idi_ci, 'idi_p_value': idi_p_value,
+            'nri_original': nri_original, 'nri_ci': nri_ci,
+            'idi_original': idi_original, 'idi_ci': idi_ci,
             'nri_events': nri_events, 'nri_nonevents': nri_nonevents
         }
 
@@ -168,7 +164,6 @@ def app():
                             results_table = pd.DataFrame({
                                 'Metric': ['IDI', 'NRI', 'NRI (Events)', 'NRI (Non-events)'],
                                 'Value': [f"{results['idi_original']:.4f}", f"{results['nri_original']:.4f}", f"{results['nri_events']:.4f}", f"{results['nri_nonevents']:.4f}"],
-                                'P-value': [f"{results['idi_p_value']:.4f}", f"{results['nri_p_value']:.4f}", "-", "-"],
                                 'Confidence Interval': [f"({results['idi_ci'][0]:.4f}, {results['idi_ci'][1]:.4f})", f"({results['nri_ci'][0]:.4f}, {results['nri_ci'][1]:.4f})", "-", "-"]
                             })
 
@@ -179,7 +174,6 @@ def app():
                             - Positive IDI indicates that the new model improves risk prediction compared to the old model.
                             - The magnitude of IDI represents the degree of improvement.
                             - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
-                            - A p-value < 0.05 suggests that the improvement is statistically significant.
                             
                             ### Interpretation of NRI Results:
                             - Positive NRI indicates that the new model improves risk classification compared to the old model.
@@ -187,7 +181,6 @@ def app():
                             - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
                             - The total NRI is the sum of NRI for events and non-events.
                             - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
-                            - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
                             """)
                             
                             # Export results
