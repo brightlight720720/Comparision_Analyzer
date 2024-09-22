@@ -127,35 +127,35 @@ def app():
                         """)
                         
                         # Visualization of C-index comparison
-                        fig, ax = plt.subplots(figsize=(10, 6))
+                        fig, ax = plt.subplots(figsize=(12, 8))
                         x = ['Old Model', 'New Model']
                         y = [c_index_old, c_index_new]
-                        bar_width = 0.35
-                        colors = ['#1f77b4', '#ff7f0e']  # Blue for old model, Orange for new model
+                        bar_width = 0.3
+                        colors = ['#ADD8E6', '#00008B']  # Light blue for old model, Deep blue for new model
 
                         bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
-                        ax.set_ylabel('C-Index', fontsize=14)
-                        ax.set_title('C-Index Comparison', fontsize=16, fontweight='bold')
+                        ax.set_ylabel('C-Index', fontsize=18)
+                        ax.set_title('C-Index Comparison', fontsize=22, fontweight='bold')
                         ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
-                        ax.tick_params(axis='both', which='major', labelsize=12)
+                        ax.tick_params(axis='both', which='major', labelsize=16)
 
                         # Add value labels on top of bars
                         for bar in bars:
                             height = bar.get_height()
                             ax.text(bar.get_x() + bar.get_width()/2., height,
                                     f'{height:.3f}',
-                                    ha='center', va='bottom', fontsize=12)
+                                    ha='center', va='bottom', fontsize=16)
 
                         # Add error bars
                         error = [[max(0, c_index_old - ci_lower), max(0, c_index_new - ci_lower)],
                                  [max(0, ci_upper - c_index_old), max(0, ci_upper - c_index_new)]]
-                        ax.errorbar(x, y, yerr=error, fmt='none', capsize=5, color='black')
+                        ax.errorbar(x, y, yerr=error, fmt='none', capsize=5, color='black', linewidth=2)
 
                         # Add gridlines
                         ax.grid(axis='y', linestyle='--', alpha=0.7)
 
                         # Add a legend
-                        ax.legend(['C-Index'], loc='lower right', fontsize=12)
+                        ax.legend(['C-Index'], loc='lower right', fontsize=16)
 
                         # Adjust layout and display the plot
                         plt.tight_layout()
