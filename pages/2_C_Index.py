@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from lifelines import CoxPHFitter
 from lifelines.utils import concordance_index
 from scipy import stats
 import matplotlib.pyplot as plt
@@ -30,18 +29,8 @@ When comparing two models:
 - The difference in C-Indices, along with its confidence interval and p-value, helps determine if the improvement is statistically significant
 """)
 
-def compute_c_index(y_true, y_pred):
-    # Combine all prediction columns with Duration and Dead
-    data = pd.concat([y_true, y_pred], axis=1)
-    
-    # Fit the Cox Proportional Hazards model
-    cph = CoxPHFitter()
-    cph.fit(data, duration_col='Duration', event_col='Dead')
-    
-    # Calculate the concordance index
-    c_index = cph.concordance_index_
-    
-    return c_index
+def compute_c_index(duration, event, predictions):
+    return concordance_index(duration, -predictions, event)
 
 def compare_c_index(c_index_old, c_index_new, n_bootstrap=1000, alpha=0.05):
     diff = c_index_new - c_index_old
@@ -102,11 +91,11 @@ if uploaded_file is not None:
             else:
                 with st.spinner("Computing C-Index..."):
                     y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
-                    y_pred_old = df[old_model_columns]
-                    y_pred_new = df[new_model_columns]
+                    y_pred_old = df[old_model_columns].mean(axis=1)
+                    y_pred_new = df[new_model_columns].mean(axis=1)
                     
-                    c_index_old = compute_c_index(y_true, y_pred_old)
-                    c_index_new = compute_c_index(y_true, y_pred_new)
+                    c_index_old = compute_c_index(y_true['Duration'], y_true['Dead'], y_pred_old)
+                    c_index_new = compute_c_index(y_true['Duration'], y_true['Dead'], y_pred_new)
                     
                     diff, ci_lower, ci_upper, p_value = compare_c_index(c_index_old, c_index_new)
                 
@@ -115,6 +104,11 @@ if uploaded_file is not None:
                 st.write(f"New model C-Index: {c_index_new:.4f}")
                 st.write(f"Difference: {diff:.4f} (95% CI: {ci_lower:.4f} - {ci_upper:.4f})")
                 st.write(f"P-value: {p_value:.4f}")
+                
+                if c_index_new > c_index_old:
+                    st.success("The new model shows improvement over the old model.")
+                else:
+                    st.warning("The new model does not show improvement over the old model.")
                 
                 st.markdown("""
                 ### Interpretation of Results:
