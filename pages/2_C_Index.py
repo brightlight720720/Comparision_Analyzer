@@ -147,9 +147,9 @@ def app():
                                     ha='center', va='bottom', fontsize=12)
 
                         # Add error bars
-                        error_old = [[0], [0]]
-                        error_new = [[max(0, c_index_new - ci_lower)], [max(0, ci_upper - c_index_new)]]
-                        ax.errorbar(x, y, yerr=[error_old, error_new], fmt='none', capsize=5, color='black')
+                        error = [[max(0, c_index_old - ci_lower), max(0, c_index_new - ci_lower)],
+                                 [max(0, ci_upper - c_index_old), max(0, ci_upper - c_index_new)]]
+                        ax.errorbar(x, y, yerr=error, fmt='none', capsize=5, color='black')
 
                         # Add gridlines
                         ax.grid(axis='y', linestyle='--', alpha=0.7)
