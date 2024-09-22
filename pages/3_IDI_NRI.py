@@ -53,6 +53,11 @@ def app():
         # Preprocess data
         df = df.replace([np.inf, -np.inf], np.nan)
        
+        # Check for NaN values and inform the user
+        nan_columns = df[old_model_columns + new_model_columns + [duration_col, event_col]].columns[df[old_model_columns + new_model_columns + [duration_col, event_col]].isna().any()].tolist()
+        if nan_columns:
+            raise ValueError(f"NaN values detected in columns: {', '.join(nan_columns)}. Please handle missing values before proceeding.")
+       
         # Impute missing values
         imputer = SimpleImputer(strategy='mean')
         cols_to_impute = old_model_columns + new_model_columns + [duration_col]
@@ -192,9 +197,12 @@ def app():
                                 file_name="idi_nri_results.csv",
                                 mime="text/csv",
                             )
+                        except ValueError as ve:
+                            st.error(f"Error: {str(ve)}")
+                            st.info("Please check your data for missing values and handle them appropriately.")
                         except Exception as e:
-                            st.error(f"An error occurred during computation: {str(e)}")
-                            st.info("Please check your data for any inconsistencies or missing values.")
+                            st.error(f"An unexpected error occurred during computation: {str(e)}")
+                            st.info("Please check your data for any inconsistencies or contact support if the issue persists.")
         except Exception as e:
             st.error(f"An error occurred while processing the file: {str(e)}")
     else:
