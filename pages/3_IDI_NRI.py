@@ -5,6 +5,7 @@ from scipy import stats
 import io
 import importlib
 from lifelines import CoxPHFitter
+from sklearn.impute import SimpleImputer
 
 def app():
     st.title("IDI and NRI Computation")
@@ -49,36 +50,47 @@ def app():
     """)
 
     def compute_idi_nri(df, duration_col, event_col, old_model_columns, new_model_columns):
+        # Preprocess data
+        df = df.replace([np.inf, -np.inf], np.nan)
+       
+        # Impute missing values
+        imputer = SimpleImputer(strategy='mean')
+        cols_to_impute = old_model_columns + new_model_columns + [duration_col]
+        df[cols_to_impute] = imputer.fit_transform(df[cols_to_impute])
+       
+        # Remove rows with NaN values in the event column
+        df = df.dropna(subset=[event_col])
+       
         # Fit old model
         cox_model_1 = CoxPHFitter()
         cox_model_1.fit(df[old_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
-        
+       
         # Fit new model
         cox_model_2 = CoxPHFitter()
         cox_model_2.fit(df[new_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
-        
+       
         # Compute predicted probabilities (risk scores) for both models
         df['pred_model_1'] = cox_model_1.predict_partial_hazard(df[old_model_columns + [duration_col, event_col]])
         df['pred_model_2'] = cox_model_2.predict_partial_hazard(df[new_model_columns + [duration_col, event_col]])
-        
+       
         # Calculate IDI
         diff_event = df.loc[df[event_col] == 1, 'pred_model_2'].mean() - df.loc[df[event_col] == 1, 'pred_model_1'].mean()
         diff_nonevent = df.loc[df[event_col] == 0, 'pred_model_2'].mean() - df.loc[df[event_col] == 0, 'pred_model_1'].mean()
         idi = diff_event - diff_nonevent
-        
+       
         # Calculate NRI
         improved = ((df['pred_model_2'] > df['pred_model_1']) & (df[event_col] == 1)).sum()
         worsened = ((df['pred_model_2'] < df['pred_model_1']) & (df[event_col] == 1)).sum()
         total_events = df[event_col].sum()
-        
+       
         improved_censored = ((df['pred_model_2'] < df['pred_model_1']) & (df[event_col] == 0)).sum()
         worsened_censored = ((df['pred_model_2'] > df['pred_model_1']) & (df[event_col] == 0)).sum()
         total_censored = len(df[event_col]) - total_events
-        
+       
         nri_events = (improved - worsened) / total_events
         nri_censored = (improved_censored - worsened_censored) / total_censored
         nri = nri_events + nri_censored
-        
+       
         return idi, nri, nri_events, nri_censored
 
     def bootstrap_nri_idi(df, duration_col, event_col, old_model_columns, new_model_columns, n_iterations=1000):
@@ -141,44 +153,48 @@ def app():
                     if len(old_model_columns) == 0 or len(new_model_columns) == 0:
                         st.error("Please select at least one column for both old and new models.")
                     else:
-                        with st.spinner("Computing IDI and NRI..."):
-                            results = bootstrap_nri_idi(df, duration_column, dead_column, old_model_columns, new_model_columns)
-                        
-                        st.subheader("IDI and NRI Results")
-                        
-                        # Display results in a table
-                        results_table = pd.DataFrame({
-                            'Metric': ['IDI', 'NRI', 'NRI (Events)', 'NRI (Non-events)'],
-                            'Value': [f"{results['idi_original']:.4f}", f"{results['nri_original']:.4f}", f"{results['nri_events']:.4f}", f"{results['nri_nonevents']:.4f}"],
-                            'P-value': [f"{results['idi_p_value']:.4f}", f"{results['nri_p_value']:.4f}", "-", "-"],
-                            'Confidence Interval': [f"({results['idi_ci'][0]:.4f}, {results['idi_ci'][1]:.4f})", f"({results['nri_ci'][0]:.4f}, {results['nri_ci'][1]:.4f})", "-", "-"]
-                        })
+                        try:
+                            with st.spinner("Computing IDI and NRI..."):
+                                results = bootstrap_nri_idi(df, duration_column, dead_column, old_model_columns, new_model_columns)
+                            
+                            st.subheader("IDI and NRI Results")
+                            
+                            # Display results in a table
+                            results_table = pd.DataFrame({
+                                'Metric': ['IDI', 'NRI', 'NRI (Events)', 'NRI (Non-events)'],
+                                'Value': [f"{results['idi_original']:.4f}", f"{results['nri_original']:.4f}", f"{results['nri_events']:.4f}", f"{results['nri_nonevents']:.4f}"],
+                                'P-value': [f"{results['idi_p_value']:.4f}", f"{results['nri_p_value']:.4f}", "-", "-"],
+                                'Confidence Interval': [f"({results['idi_ci'][0]:.4f}, {results['idi_ci'][1]:.4f})", f"({results['nri_ci'][0]:.4f}, {results['nri_ci'][1]:.4f})", "-", "-"]
+                            })
 
-                        st.table(results_table)
-                        
-                        st.markdown("""
-                        ### Interpretation of IDI Results:
-                        - Positive IDI indicates that the new model improves risk prediction compared to the old model.
-                        - The magnitude of IDI represents the degree of improvement.
-                        - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
-                        - A p-value < 0.05 suggests that the improvement is statistically significant.
-                        
-                        ### Interpretation of NRI Results:
-                        - Positive NRI indicates that the new model improves risk classification compared to the old model.
-                        - NRI for events shows the net improvement in classifying individuals who experience the event.
-                        - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
-                        - The total NRI is the sum of NRI for events and non-events.
-                        - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
-                        - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
-                        """)
-                        
-                        # Export results
-                        st.download_button(
-                            label="Download IDI/NRI Results",
-                            data=results_table.to_csv(index=False),
-                            file_name="idi_nri_results.csv",
-                            mime="text/csv",
-                        )
+                            st.table(results_table)
+                            
+                            st.markdown("""
+                            ### Interpretation of IDI Results:
+                            - Positive IDI indicates that the new model improves risk prediction compared to the old model.
+                            - The magnitude of IDI represents the degree of improvement.
+                            - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
+                            - A p-value < 0.05 suggests that the improvement is statistically significant.
+                            
+                            ### Interpretation of NRI Results:
+                            - Positive NRI indicates that the new model improves risk classification compared to the old model.
+                            - NRI for events shows the net improvement in classifying individuals who experience the event.
+                            - NRI for non-events shows the net improvement in classifying individuals who do not experience the event.
+                            - The total NRI is the sum of NRI for events and non-events.
+                            - The 95% Confidence Interval (CI) indicates the range where the true NRI likely lies.
+                            - A p-value < 0.05 suggests that the improvement in classification is statistically significant.
+                            """)
+                            
+                            # Export results
+                            st.download_button(
+                                label="Download IDI/NRI Results",
+                                data=results_table.to_csv(index=False),
+                                file_name="idi_nri_results.csv",
+                                mime="text/csv",
+                            )
+                        except Exception as e:
+                            st.error(f"An error occurred during computation: {str(e)}")
+                            st.info("Please check your data for any inconsistencies or missing values.")
         except Exception as e:
             st.error(f"An error occurred while processing the file: {str(e)}")
     else:
