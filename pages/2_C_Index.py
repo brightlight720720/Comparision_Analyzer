@@ -128,15 +128,17 @@ def app():
                         
                         # Visualization of C-index comparison
                         fig, ax = plt.subplots(figsize=(10, 8))
-                        x = np.array([-0.2, 0.2])
+                        bar_spacing = 0.4  # Adjust this value to change the spacing between bars
+                        x = np.array([-bar_spacing/2, bar_spacing/2])
                         y = [c_index_old, c_index_new]
-                        bar_width = 0.35
+                        bar_width = 0.3
                         colors = ['#ADD8E6', '#00008B']  # Light blue for old model, Deep blue for new model
 
                         bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
                         ax.set_ylabel('C-Index', fontsize=18)
                         ax.set_title('C-Index Comparison', fontsize=22, fontweight='bold')
                         ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
+                        ax.set_xlim(-bar_spacing, bar_spacing)
                         ax.tick_params(axis='both', which='major', labelsize=18)
                         ax.set_xticks(x)
                         ax.set_xticklabels(['Old Model', 'New Model'])
