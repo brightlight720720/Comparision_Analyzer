@@ -32,7 +32,7 @@ NRI assesses the improvement in risk classification offered by a new model compa
 """)
 
 def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
-    idi = np.mean(y_pred_new) - np.mean(y_pred_old)
+    idi = np.mean((y_pred_new - y_pred_old) * (y_true - y_pred_old)) - np.mean((y_pred_new - y_pred_old) * (y_true - y_pred_new))
     
     bootstrap_idis = []
     for _ in range(n_bootstrap):
@@ -40,24 +40,35 @@ def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
         y_true_resampled = y_true.iloc[indices]
         y_pred_old_resampled = y_pred_old.iloc[indices]
         y_pred_new_resampled = y_pred_new.iloc[indices]
-        bootstrap_idis.append(np.mean(y_pred_new_resampled) - np.mean(y_pred_old_resampled))
+        bootstrap_idi = np.mean((y_pred_new_resampled - y_pred_old_resampled) * (y_true_resampled - y_pred_old_resampled)) - np.mean((y_pred_new_resampled - y_pred_old_resampled) * (y_true_resampled - y_pred_new_resampled))
+        bootstrap_idis.append(bootstrap_idi)
     
     ci_lower = np.percentile(bootstrap_idis, alpha/2 * 100)
     ci_upper = np.percentile(bootstrap_idis, (1 - alpha/2) * 100)
     
-    t_statistic = idi / (np.std(bootstrap_idis) / np.sqrt(n_bootstrap))
-    p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
+    se = np.std(bootstrap_idis)
+    z_score = idi / se
+    p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
     
     return idi, ci_lower, ci_upper, p_value
 
 def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000, alpha=0.05):
-    events_improved = np.sum((y_pred_new > threshold) & (y_pred_old <= threshold) & (y_true == 1))
-    events_worsened = np.sum((y_pred_new <= threshold) & (y_pred_old > threshold) & (y_true == 1))
-    nonevents_improved = np.sum((y_pred_new <= threshold) & (y_pred_old > threshold) & (y_true == 0))
-    nonevents_worsened = np.sum((y_pred_new > threshold) & (y_pred_old <= threshold) & (y_true == 0))
+    def categorize(y_pred):
+        return (y_pred > threshold).astype(int)
     
-    nri_events = (events_improved - events_worsened) / np.sum(y_true == 1)
-    nri_nonevents = (nonevents_improved - nonevents_worsened) / np.sum(y_true == 0)
+    old_categories = categorize(y_pred_old)
+    new_categories = categorize(y_pred_new)
+    
+    events_improved = np.sum((new_categories > old_categories) & (y_true == 1))
+    events_worsened = np.sum((new_categories < old_categories) & (y_true == 1))
+    nonevents_improved = np.sum((new_categories < old_categories) & (y_true == 0))
+    nonevents_worsened = np.sum((new_categories > old_categories) & (y_true == 0))
+    
+    n_events = np.sum(y_true == 1)
+    n_nonevents = np.sum(y_true == 0)
+    
+    nri_events = (events_improved - events_worsened) / n_events
+    nri_nonevents = (nonevents_improved - nonevents_worsened) / n_nonevents
     nri = nri_events + nri_nonevents
     
     bootstrap_nris = []
@@ -67,20 +78,27 @@ def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000,
         y_pred_old_resampled = y_pred_old.iloc[indices]
         y_pred_new_resampled = y_pred_new.iloc[indices]
         
-        events_improved = np.sum((y_pred_new_resampled > threshold) & (y_pred_old_resampled <= threshold) & (y_true_resampled == 1))
-        events_worsened = np.sum((y_pred_new_resampled <= threshold) & (y_pred_old_resampled > threshold) & (y_true_resampled == 1))
-        nonevents_improved = np.sum((y_pred_new_resampled <= threshold) & (y_pred_old_resampled > threshold) & (y_true_resampled == 0))
-        nonevents_worsened = np.sum((y_pred_new_resampled > threshold) & (y_pred_old_resampled <= threshold) & (y_true_resampled == 0))
+        old_categories_resampled = categorize(y_pred_old_resampled)
+        new_categories_resampled = categorize(y_pred_new_resampled)
         
-        nri_events = (events_improved - events_worsened) / np.sum(y_true_resampled == 1)
-        nri_nonevents = (nonevents_improved - nonevents_worsened) / np.sum(y_true_resampled == 0)
-        bootstrap_nris.append(nri_events + nri_nonevents)
+        events_improved = np.sum((new_categories_resampled > old_categories_resampled) & (y_true_resampled == 1))
+        events_worsened = np.sum((new_categories_resampled < old_categories_resampled) & (y_true_resampled == 1))
+        nonevents_improved = np.sum((new_categories_resampled < old_categories_resampled) & (y_true_resampled == 0))
+        nonevents_worsened = np.sum((new_categories_resampled > old_categories_resampled) & (y_true_resampled == 0))
+        
+        n_events_resampled = np.sum(y_true_resampled == 1)
+        n_nonevents_resampled = np.sum(y_true_resampled == 0)
+        
+        nri_events_resampled = (events_improved - events_worsened) / n_events_resampled
+        nri_nonevents_resampled = (nonevents_improved - nonevents_worsened) / n_nonevents_resampled
+        bootstrap_nris.append(nri_events_resampled + nri_nonevents_resampled)
     
     ci_lower = np.percentile(bootstrap_nris, alpha/2 * 100)
     ci_upper = np.percentile(bootstrap_nris, (1 - alpha/2) * 100)
     
-    t_statistic = nri / (np.std(bootstrap_nris) / np.sqrt(n_bootstrap))
-    p_value = 2 * (1 - stats.t.cdf(abs(t_statistic), df=n_bootstrap-1))
+    se = np.std(bootstrap_nris)
+    z_score = nri / se
+    p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
     
     return nri, nri_events, nri_nonevents, ci_lower, ci_upper, p_value
 
@@ -134,10 +152,10 @@ if uploaded_file is not None:
                 
                 # Display results in a table
                 results_table = pd.DataFrame({
-                    'Metric': ['IDI', 'NRI'],
-                    'Value': [f"{idi:.4f}", f"{nri:.4f}"],
-                    'P-value': [f"{idi_p_value:.4f}", f"{nri_p_value:.4f}"],
-                    'Confidence Interval': [f"({idi_ci_lower:.4f}, {idi_ci_upper:.4f})", f"({nri_ci_lower:.4f}, {nri_ci_upper:.4f})"]
+                    'Metric': ['IDI', 'NRI', 'NRI (Events)', 'NRI (Non-events)'],
+                    'Value': [f"{idi:.4f}", f"{nri:.4f}", f"{nri_events:.4f}", f"{nri_nonevents:.4f}"],
+                    'P-value': [f"{idi_p_value:.4f}", f"{nri_p_value:.4f}", "-", "-"],
+                    'Confidence Interval': [f"({idi_ci_lower:.4f}, {idi_ci_upper:.4f})", f"({nri_ci_lower:.4f}, {nri_ci_upper:.4f})", "-", "-"]
                 })
 
                 st.table(results_table)
