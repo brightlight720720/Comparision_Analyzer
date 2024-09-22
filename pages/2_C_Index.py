@@ -128,23 +128,25 @@ def app():
                         
                         # Visualization of C-index comparison
                         fig, ax = plt.subplots(figsize=(12, 8))
-                        x = ['Old Model', 'New Model']
+                        x = np.array([0, 1])
                         y = [c_index_old, c_index_new]
-                        bar_width = 0.3
+                        bar_width = 0.2
                         colors = ['#ADD8E6', '#00008B']  # Light blue for old model, Deep blue for new model
 
                         bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
                         ax.set_ylabel('C-Index', fontsize=18)
                         ax.set_title('C-Index Comparison', fontsize=22, fontweight='bold')
                         ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
-                        ax.tick_params(axis='both', which='major', labelsize=16)
+                        ax.tick_params(axis='both', which='major', labelsize=18)
+                        ax.set_xticks(x)
+                        ax.set_xticklabels(['Old Model', 'New Model'])
 
                         # Add value labels on top of bars
                         for bar in bars:
                             height = bar.get_height()
                             ax.text(bar.get_x() + bar.get_width()/2., height,
                                     f'{height:.3f}',
-                                    ha='center', va='bottom', fontsize=16)
+                                    ha='center', va='bottom', fontsize=18)
 
                         # Add error bars
                         error = [[max(0, c_index_old - ci_lower), max(0, c_index_new - ci_lower)],
@@ -153,9 +155,6 @@ def app():
 
                         # Add gridlines
                         ax.grid(axis='y', linestyle='--', alpha=0.7)
-
-                        # Add a legend
-                        ax.legend(['C-Index'], loc='lower right', fontsize=16)
 
                         # Adjust layout and display the plot
                         plt.tight_layout()
