@@ -53,7 +53,9 @@ Please select a page from the dropdown menu to begin your analysis.
 ''')
 
 # Add author information to the bottom of the sidebar
-st.sidebar.markdown("---")
-st.sidebar.title("Author Information")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown("### Author Information")
 st.sidebar.write("Author: YuHsuan")
-st.sidebar.write("Email: brightlight720720@gmail.com")
+st.sidebar.write("Email:\n brightlight720720@gmail.com")
