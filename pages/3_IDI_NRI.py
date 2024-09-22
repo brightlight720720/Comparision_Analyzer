@@ -4,6 +4,7 @@ import numpy as np
 from scipy import stats
 import io
 import importlib
+from lifelines import CoxPHFitter
 
 def app():
     st.title("IDI and NRI Computation")
@@ -47,40 +48,49 @@ def app():
     - NRI can be further broken down into NRI for events and non-events, providing insight into how the new model performs for different outcomes.
     """)
 
-    def compute_idi(y_true, y_pred_old, y_pred_new):
-        diff_event = y_pred_new[y_true == 1].mean() - y_pred_old[y_true == 1].mean()
-        diff_nonevent = y_pred_new[y_true == 0].mean() - y_pred_old[y_true == 0].mean()
-        idi = diff_event - diff_nonevent
-        return idi
-
-    def compute_nri(y_true, y_pred_old, y_pred_new):
-        improved = ((y_pred_new > y_pred_old) & (y_true == 1)).sum()
-        worsened = ((y_pred_new < y_pred_old) & (y_true == 1)).sum()
-        total_events = y_true.sum()
+    def compute_idi_nri(df, duration_col, event_col, old_model_columns, new_model_columns):
+        # Fit old model
+        cox_model_1 = CoxPHFitter()
+        cox_model_1.fit(df[old_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
         
-        improved_censored = ((y_pred_new < y_pred_old) & (y_true == 0)).sum()
-        worsened_censored = ((y_pred_new > y_pred_old) & (y_true == 0)).sum()
-        total_censored = len(y_true) - total_events
+        # Fit new model
+        cox_model_2 = CoxPHFitter()
+        cox_model_2.fit(df[new_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
+        
+        # Compute predicted probabilities (risk scores) for both models
+        df['pred_model_1'] = cox_model_1.predict_partial_hazard(df[old_model_columns + [duration_col, event_col]])
+        df['pred_model_2'] = cox_model_2.predict_partial_hazard(df[new_model_columns + [duration_col, event_col]])
+        
+        # Calculate IDI
+        diff_event = df.loc[df[event_col] == 1, 'pred_model_2'].mean() - df.loc[df[event_col] == 1, 'pred_model_1'].mean()
+        diff_nonevent = df.loc[df[event_col] == 0, 'pred_model_2'].mean() - df.loc[df[event_col] == 0, 'pred_model_1'].mean()
+        idi = diff_event - diff_nonevent
+        
+        # Calculate NRI
+        improved = ((df['pred_model_2'] > df['pred_model_1']) & (df[event_col] == 1)).sum()
+        worsened = ((df['pred_model_2'] < df['pred_model_1']) & (df[event_col] == 1)).sum()
+        total_events = df[event_col].sum()
+        
+        improved_censored = ((df['pred_model_2'] < df['pred_model_1']) & (df[event_col] == 0)).sum()
+        worsened_censored = ((df['pred_model_2'] > df['pred_model_1']) & (df[event_col] == 0)).sum()
+        total_censored = len(df[event_col]) - total_events
         
         nri_events = (improved - worsened) / total_events
         nri_censored = (improved_censored - worsened_censored) / total_censored
         nri = nri_events + nri_censored
-        return nri, nri_events, nri_censored
+        
+        return idi, nri, nri_events, nri_censored
 
-    def bootstrap_nri_idi(y_true, y_pred_old, y_pred_new, n_iterations=1000):
+    def bootstrap_nri_idi(df, duration_col, event_col, old_model_columns, new_model_columns, n_iterations=1000):
         nri_values = []
         idi_values = []
         
         for _ in range(n_iterations):
             # Bootstrap resample the data
-            indices = np.random.choice(len(y_true), len(y_true), replace=True)
-            y_true_boot = y_true.iloc[indices]
-            y_pred_old_boot = y_pred_old.iloc[indices]
-            y_pred_new_boot = y_pred_new.iloc[indices]
+            boot_df = df.sample(n=len(df), replace=True)
             
-            # Calculate NRI and IDI on bootstrap sample
-            nri_bootstrap, _, _ = compute_nri(y_true_boot, y_pred_old_boot, y_pred_new_boot)
-            idi_bootstrap = compute_idi(y_true_boot, y_pred_old_boot, y_pred_new_boot)
+            # Calculate IDI and NRI on bootstrap sample
+            idi_bootstrap, nri_bootstrap, _, _ = compute_idi_nri(boot_df, duration_col, event_col, old_model_columns, new_model_columns)
             
             nri_values.append(nri_bootstrap)
             idi_values.append(idi_bootstrap)
@@ -89,9 +99,8 @@ def app():
         nri_values = np.array(nri_values)
         idi_values = np.array(idi_values)
         
-        # Compute original NRI and IDI
-        nri_original, nri_events, nri_nonevents = compute_nri(y_true, y_pred_old, y_pred_new)
-        idi_original = compute_idi(y_true, y_pred_old, y_pred_new)
+        # Compute original IDI and NRI
+        idi_original, nri_original, nri_events, nri_nonevents = compute_idi_nri(df, duration_col, event_col, old_model_columns, new_model_columns)
         
         # Calculate 95% confidence intervals
         nri_ci = np.percentile(nri_values, [2.5, 97.5])
@@ -113,6 +122,7 @@ def app():
             if df is not None:
                 # Column selection section
                 st.subheader("Column Selection")
+                duration_column = st.selectbox("Select the Duration column", df.columns)
                 dead_column = st.selectbox("Select the Dead column", df.columns)
                 
                 st.info("You can select different numbers of columns for the old and new models.")
@@ -132,11 +142,7 @@ def app():
                         st.error("Please select at least one column for both old and new models.")
                     else:
                         with st.spinner("Computing IDI and NRI..."):
-                            y_true = df[dead_column]
-                            y_pred_old = df[old_model_columns].mean(axis=1)
-                            y_pred_new = df[new_model_columns].mean(axis=1)
-                            
-                            results = bootstrap_nri_idi(y_true, y_pred_old, y_pred_new)
+                            results = bootstrap_nri_idi(df, duration_column, dead_column, old_model_columns, new_model_columns)
                         
                         st.subheader("IDI and NRI Results")
                         

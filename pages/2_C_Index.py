@@ -112,7 +112,7 @@ def app():
                         st.write(f"Difference: {diff:.4f} (95% CI: {ci_lower:.4f} - {ci_upper:.4f})")
                         st.write(f"P-value: {p_value:.4f}")
                         
-                        if c_index_new > c_index_old:
+                        if c_index_new > c_index_old and p_value <0.05:
                             st.success("The new model shows improvement over the old model.")
                         else:
                             st.warning("The new model does not show improvement over the old model.")
