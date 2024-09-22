@@ -140,7 +140,7 @@ def app():
                 # Column selection section
                 st.subheader("Column Selection")
                 duration_column = st.selectbox("Select the Duration column", df.columns)
-                dead_column = st.selectbox("Select the Dead column", df.columns)
+                dead_column = st.selectbox("Select the Event column", df.columns)
                 
                 st.info("You can select different numbers of columns for the old and new models.")
                 

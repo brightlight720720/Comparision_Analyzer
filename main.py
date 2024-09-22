@@ -3,11 +3,6 @@ import importlib
 
 st.set_page_config(page_title="Multi-format Analysis App", layout="wide")
 
-# Sidebar with author information
-st.sidebar.title("Author Information")
-st.sidebar.write("Author: YuHsuan")
-st.sidebar.write("Email: brightlight720720@gmail.com")
-
 # Dynamic page loading
 page = st.selectbox("Select a page", ["Home", "C-Index", "IDI/NRI"])
 
@@ -56,3 +51,9 @@ NRI assesses the improvement in risk classification offered by a new model compa
 
 Please select a page from the dropdown menu to begin your analysis.
 ''')
+
+# Add author information to the bottom of the sidebar
+st.sidebar.markdown("---")
+st.sidebar.title("Author Information")
+st.sidebar.write("Author: YuHsuan")
+st.sidebar.write("Email: brightlight720720@gmail.com")

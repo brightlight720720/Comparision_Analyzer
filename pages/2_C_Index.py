@@ -74,7 +74,7 @@ def app():
                 # Column selection section
                 st.subheader("Column Selection")
                 duration_column = st.selectbox("Select the Duration column", df.columns)
-                dead_column = st.selectbox("Select the Dead column", df.columns)
+                dead_column = st.selectbox("Select the Event column", df.columns)
                 
                 st.info("You can select different numbers of columns for the old and new models.")
                 
@@ -131,7 +131,7 @@ def app():
                         bar_spacing = 0.4  # Adjust this value to change the spacing between bars
                         x = np.array([-bar_spacing/2, bar_spacing/2])
                         y = [c_index_old, c_index_new]
-                        bar_width = 0.3
+                        bar_width = 0.25
                         colors = ['#ADD8E6', '#00008B']  # Light blue for old model, Deep blue for new model
 
                         bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
