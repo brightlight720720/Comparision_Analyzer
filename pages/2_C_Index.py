@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from lifelines import CoxPHFitter
 from lifelines.utils import concordance_index
 from scipy import stats
 import matplotlib.pyplot as plt
@@ -30,7 +31,8 @@ When comparing two models:
 """)
 
 def compute_c_index(duration, event, predictions):
-    return concordance_index(duration, -predictions, event)
+    cph = CoxPHFitter().fit(pd.DataFrame({'T': duration, 'E': event, 'predictions': predictions}), 'T', 'E')
+    return concordance_index(duration, -cph.predict_partial_hazard(pd.DataFrame({'predictions': predictions})), event)
 
 def compare_c_index(c_index_old, c_index_new, n_bootstrap=1000, alpha=0.05):
     diff = c_index_new - c_index_old
