@@ -1,0 +1,92 @@
+import pandas as pd
+import numpy as np
+from lifelines import CoxPHFitter
+from sklearn.utils import resample
+
+# Load your dataset
+data = pd.read_csv('your_file.csv')
+
+# Fit Model 1: Cox model using UACR only
+df_model_1 = data[['Duration', 'Dead', 'UACR']]
+cox_model_1 = CoxPHFitter()
+cox_model_1.fit(df_model_1, duration_col='Duration', event_col='Dead')
+
+# Fit Model 2: Cox model using UACR and SD_UACR
+df_model_2 = data[['Duration', 'Dead', 'UACR', 'SD_UACR']]
+cox_model_2 = CoxPHFitter()
+cox_model_2.fit(df_model_2, duration_col='Duration', event_col='Dead')
+
+# Compute predicted probabilities (risk scores) for both models
+data['pred_model_1'] = cox_model_1.predict_partial_hazard(df_model_1)
+data['pred_model_2'] = cox_model_2.predict_partial_hazard(df_model_2)
+
+# Define NRI calculation function
+def calculate_nri(data, pred_model_1, pred_model_2, event_col):
+    improved = ((data[pred_model_2] > data[pred_model_1]) & (data[event_col] == 1)).sum()
+    worsened = ((data[pred_model_2] < data[pred_model_1]) & (data[event_col] == 1)).sum()
+    total_events = data[event_col].sum()
+    
+    improved_censored = ((data[pred_model_2] < data[pred_model_1]) & (data[event_col] == 0)).sum()
+    worsened_censored = ((data[pred_model_2] > data[pred_model_1]) & (data[event_col] == 0)).sum()
+    total_censored = len(data[event_col]) - total_events
+    
+    nri_events = (improved - worsened) / total_events
+    nri_censored = (improved_censored - worsened_censored) / total_censored
+    nri = nri_events + nri_censored
+    return nri
+
+# Define IDI calculation function
+def calculate_idi(data, pred_model_1, pred_model_2, event_col):
+    diff_event = data.loc[data[event_col] == 1, pred_model_2].mean() - data.loc[data[event_col] == 1, pred_model_1].mean()
+    diff_nonevent = data.loc[data[event_col] == 0, pred_model_2].mean() - data.loc[data[event_col] == 0, pred_model_1].mean()
+    idi = diff_event - diff_nonevent
+    return idi
+
+# Bootstrapping function to get NRI, IDI, and their distributions
+def bootstrap_nri_idi(data, n_iterations=1000):
+    nri_values = []
+    idi_values = []
+    
+    for _ in range(n_iterations):
+        # Bootstrap resample the data
+        boot_data = resample(data, replace=True, n_samples=len(data))
+        
+        # Calculate NRI and IDI on bootstrap sample
+        nri_bootstrap = calculate_nri(boot_data, 'pred_model_1', 'pred_model_2', 'Dead')
+        idi_bootstrap = calculate_idi(boot_data, 'pred_model_1', 'pred_model_2', 'Dead')
+        
+        nri_values.append(nri_bootstrap)
+        idi_values.append(idi_bootstrap)
+    
+    # Convert lists to numpy arrays for easier calculations
+    nri_values = np.array(nri_values)
+    idi_values = np.array(idi_values)
+    
+    # Compute original NRI and IDI
+    nri_original = calculate_nri(data, 'pred_model_1', 'pred_model_2', 'Dead')
+    idi_original = calculate_idi(data, 'pred_model_1', 'pred_model_2', 'Dead')
+    
+    # Calculate 95% confidence intervals
+    nri_ci = np.percentile(nri_values, [2.5, 97.5])
+    idi_ci = np.percentile(idi_values, [2.5, 97.5])
+    
+    # Calculate p-value (two-tailed test)
+    nri_p_value = np.mean(nri_values >= nri_original)
+    idi_p_value = np.mean(idi_values >= idi_original)
+    
+    return {
+        'nri_original': nri_original, 'nri_ci': nri_ci, 'nri_p_value': nri_p_value,
+        'idi_original': idi_original, 'idi_ci': idi_ci, 'idi_p_value': idi_p_value
+    }
+
+# Perform bootstrap to get NRI, IDI, confidence intervals, and p-values
+results = bootstrap_nri_idi(data)
+
+# Output the results
+print("NRI:", results['nri_original'])
+print("NRI 95% CI:", results['nri_ci'])
+print("NRI p-value:", results['nri_p_value'])
+
+print("IDI:", results['idi_original'])
+print("IDI 95% CI:", results['idi_ci'])
+print("IDI p-value:", results['idi_p_value'])

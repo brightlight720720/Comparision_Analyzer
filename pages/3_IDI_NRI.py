@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import io
+import importlib
 
 def app():
     st.title("IDI and NRI Computation")
@@ -21,7 +22,7 @@ def app():
             return None
 
     # File upload section
-    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
+    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"], key="idi_nri_uploader")
 
     st.markdown("""
     ### What are IDI and NRI?
@@ -46,76 +47,65 @@ def app():
     - NRI can be further broken down into NRI for events and non-events, providing insight into how the new model performs for different outcomes.
     """)
 
-    def compute_idi(y_true, y_pred_old, y_pred_new, n_bootstrap=1000, alpha=0.05):
-        idi = np.mean((y_pred_new - y_pred_old) * (y_true - y_pred_old)) - np.mean((y_pred_new - y_pred_old) * (y_true - y_pred_new))
-        
-        bootstrap_idis = []
-        for _ in range(n_bootstrap):
-            indices = np.random.choice(len(y_true), len(y_true), replace=True)
-            y_true_resampled = y_true.iloc[indices]
-            y_pred_old_resampled = y_pred_old.iloc[indices]
-            y_pred_new_resampled = y_pred_new.iloc[indices]
-            bootstrap_idi = np.mean((y_pred_new_resampled - y_pred_old_resampled) * (y_true_resampled - y_pred_old_resampled)) - np.mean((y_pred_new_resampled - y_pred_old_resampled) * (y_true_resampled - y_pred_new_resampled))
-            bootstrap_idis.append(bootstrap_idi)
-        
-        ci_lower = np.percentile(bootstrap_idis, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_idis, (1 - alpha/2) * 100)
-        
-        se = np.std(bootstrap_idis)
-        z_score = idi / se
-        p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
-        
-        return idi, ci_lower, ci_upper, p_value
+    def compute_idi(y_true, y_pred_old, y_pred_new):
+        diff_event = y_pred_new[y_true == 1].mean() - y_pred_old[y_true == 1].mean()
+        diff_nonevent = y_pred_new[y_true == 0].mean() - y_pred_old[y_true == 0].mean()
+        idi = diff_event - diff_nonevent
+        return idi
 
-    def compute_nri(y_true, y_pred_old, y_pred_new, threshold=0.5, n_bootstrap=1000, alpha=0.05):
-        def categorize(y_pred):
-            return (y_pred > threshold).astype(int)
+    def compute_nri(y_true, y_pred_old, y_pred_new):
+        improved = ((y_pred_new > y_pred_old) & (y_true == 1)).sum()
+        worsened = ((y_pred_new < y_pred_old) & (y_true == 1)).sum()
+        total_events = y_true.sum()
         
-        old_categories = categorize(y_pred_old)
-        new_categories = categorize(y_pred_new)
+        improved_censored = ((y_pred_new < y_pred_old) & (y_true == 0)).sum()
+        worsened_censored = ((y_pred_new > y_pred_old) & (y_true == 0)).sum()
+        total_censored = len(y_true) - total_events
         
-        events_improved = np.sum((new_categories > old_categories) & (y_true == 1))
-        events_worsened = np.sum((new_categories < old_categories) & (y_true == 1))
-        nonevents_improved = np.sum((new_categories < old_categories) & (y_true == 0))
-        nonevents_worsened = np.sum((new_categories > old_categories) & (y_true == 0))
+        nri_events = (improved - worsened) / total_events
+        nri_censored = (improved_censored - worsened_censored) / total_censored
+        nri = nri_events + nri_censored
+        return nri, nri_events, nri_censored
+
+    def bootstrap_nri_idi(y_true, y_pred_old, y_pred_new, n_iterations=1000):
+        nri_values = []
+        idi_values = []
         
-        n_events = np.sum(y_true == 1)
-        n_nonevents = np.sum(y_true == 0)
-        
-        nri_events = (events_improved - events_worsened) / n_events
-        nri_nonevents = (nonevents_improved - nonevents_worsened) / n_nonevents
-        nri = nri_events + nri_nonevents
-        
-        bootstrap_nris = []
-        for _ in range(n_bootstrap):
+        for _ in range(n_iterations):
+            # Bootstrap resample the data
             indices = np.random.choice(len(y_true), len(y_true), replace=True)
-            y_true_resampled = y_true.iloc[indices]
-            y_pred_old_resampled = y_pred_old.iloc[indices]
-            y_pred_new_resampled = y_pred_new.iloc[indices]
+            y_true_boot = y_true.iloc[indices]
+            y_pred_old_boot = y_pred_old.iloc[indices]
+            y_pred_new_boot = y_pred_new.iloc[indices]
             
-            old_categories_resampled = categorize(y_pred_old_resampled)
-            new_categories_resampled = categorize(y_pred_new_resampled)
+            # Calculate NRI and IDI on bootstrap sample
+            nri_bootstrap, _, _ = compute_nri(y_true_boot, y_pred_old_boot, y_pred_new_boot)
+            idi_bootstrap = compute_idi(y_true_boot, y_pred_old_boot, y_pred_new_boot)
             
-            events_improved = np.sum((new_categories_resampled > old_categories_resampled) & (y_true_resampled == 1))
-            events_worsened = np.sum((new_categories_resampled < old_categories_resampled) & (y_true_resampled == 1))
-            nonevents_improved = np.sum((new_categories_resampled < old_categories_resampled) & (y_true_resampled == 0))
-            nonevents_worsened = np.sum((new_categories_resampled > old_categories_resampled) & (y_true_resampled == 0))
-            
-            n_events_resampled = np.sum(y_true_resampled == 1)
-            n_nonevents_resampled = np.sum(y_true_resampled == 0)
-            
-            nri_events_resampled = (events_improved - events_worsened) / n_events_resampled
-            nri_nonevents_resampled = (nonevents_improved - nonevents_worsened) / n_nonevents_resampled
-            bootstrap_nris.append(nri_events_resampled + nri_nonevents_resampled)
+            nri_values.append(nri_bootstrap)
+            idi_values.append(idi_bootstrap)
         
-        ci_lower = np.percentile(bootstrap_nris, alpha/2 * 100)
-        ci_upper = np.percentile(bootstrap_nris, (1 - alpha/2) * 100)
+        # Convert lists to numpy arrays for easier calculations
+        nri_values = np.array(nri_values)
+        idi_values = np.array(idi_values)
         
-        se = np.std(bootstrap_nris)
-        z_score = nri / se
-        p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
+        # Compute original NRI and IDI
+        nri_original, nri_events, nri_nonevents = compute_nri(y_true, y_pred_old, y_pred_new)
+        idi_original = compute_idi(y_true, y_pred_old, y_pred_new)
         
-        return nri, nri_events, nri_nonevents, ci_lower, ci_upper, p_value
+        # Calculate 95% confidence intervals
+        nri_ci = np.percentile(nri_values, [2.5, 97.5])
+        idi_ci = np.percentile(idi_values, [2.5, 97.5])
+        
+        # Calculate p-value (two-tailed test)
+        nri_p_value = min(np.mean(nri_values >= nri_original), np.mean(nri_values <= nri_original)) * 2
+        idi_p_value = min(np.mean(idi_values >= idi_original), np.mean(idi_values <= idi_original)) * 2
+        
+        return {
+            'nri_original': nri_original, 'nri_ci': nri_ci, 'nri_p_value': nri_p_value,
+            'idi_original': idi_original, 'idi_ci': idi_ci, 'idi_p_value': idi_p_value,
+            'nri_events': nri_events, 'nri_nonevents': nri_nonevents
+        }
 
     if uploaded_file is not None:
         try:
@@ -129,9 +119,9 @@ def app():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    old_model_columns = st.multiselect("Select the old model columns", df.columns)
+                    old_model_columns = st.multiselect("Select the old model columns", df.columns, key="old_model_columns_idi_nri")
                 with col2:
-                    new_model_columns = st.multiselect("Select the new model columns", df.columns)
+                    new_model_columns = st.multiselect("Select the new model columns", df.columns, key="new_model_columns_idi_nri")
                 
                 # Visual indicators for the number of columns selected for each model
                 st.write(f"Old model columns selected: {len(old_model_columns)}")
@@ -146,17 +136,16 @@ def app():
                             y_pred_old = df[old_model_columns].mean(axis=1)
                             y_pred_new = df[new_model_columns].mean(axis=1)
                             
-                            idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old, y_pred_new)
-                            nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old, y_pred_new)
+                            results = bootstrap_nri_idi(y_true, y_pred_old, y_pred_new)
                         
                         st.subheader("IDI and NRI Results")
                         
                         # Display results in a table
                         results_table = pd.DataFrame({
                             'Metric': ['IDI', 'NRI', 'NRI (Events)', 'NRI (Non-events)'],
-                            'Value': [f"{idi:.4f}", f"{nri:.4f}", f"{nri_events:.4f}", f"{nri_nonevents:.4f}"],
-                            'P-value': [f"{idi_p_value:.4f}", f"{nri_p_value:.4f}", "-", "-"],
-                            'Confidence Interval': [f"({idi_ci_lower:.4f}, {idi_ci_upper:.4f})", f"({nri_ci_lower:.4f}, {nri_ci_upper:.4f})", "-", "-"]
+                            'Value': [f"{results['idi_original']:.4f}", f"{results['nri_original']:.4f}", f"{results['nri_events']:.4f}", f"{results['nri_nonevents']:.4f}"],
+                            'P-value': [f"{results['idi_p_value']:.4f}", f"{results['nri_p_value']:.4f}", "-", "-"],
+                            'Confidence Interval': [f"({results['idi_ci'][0]:.4f}, {results['idi_ci'][1]:.4f})", f"({results['nri_ci'][0]:.4f}, {results['nri_ci'][1]:.4f})", "-", "-"]
                         })
 
                         st.table(results_table)

@@ -6,6 +6,8 @@ from lifelines.utils import concordance_index
 from scipy import stats
 import matplotlib.pyplot as plt
 import io
+import importlib
+
 
 def app():
     st.title("C-Index Computation and Comparison")
