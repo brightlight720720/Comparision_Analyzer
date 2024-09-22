@@ -31,14 +31,15 @@ When comparing two models:
 """)
 
 def compute_c_index(y_true, y_pred):
-    df = pd.concat([y_true, y_pred], axis=1)
+    # Combine all prediction columns with Duration and Dead
+    data = pd.concat([y_true, y_pred], axis=1)
     
-    cox_model = CoxPHFitter()
-    cox_model.fit(df, duration_col='Duration', event_col='Dead')
+    # Fit the Cox Proportional Hazards model
+    cph = CoxPHFitter()
+    cph.fit(data, duration_col='Duration', event_col='Dead')
     
-    df['risk_score'] = cox_model.predict_partial_hazard(df)
-    
-    c_index = concordance_index(df['Duration'], df['risk_score'], df['Dead'])
+    # Calculate the concordance index
+    c_index = cph.concordance_index_
     
     return c_index
 
