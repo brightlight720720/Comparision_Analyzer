@@ -67,11 +67,11 @@ def app():
         df = df.dropna(subset=[event_col])
        
         # Fit old model
-        cox_model_1 = CoxPHFitter()
+        cox_model_1 = CoxPHFitter(penalizer=0.1)
         cox_model_1.fit(df[old_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
        
         # Fit new model
-        cox_model_2 = CoxPHFitter()
+        cox_model_2 = CoxPHFitter(penalizer=0.1)
         cox_model_2.fit(df[new_model_columns + [duration_col, event_col]], duration_col=duration_col, event_col=event_col)
        
         # Compute predicted probabilities (risk scores) for both models

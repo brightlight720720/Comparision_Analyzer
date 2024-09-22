@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import io
 import importlib
 
-
 def app():
     st.title("C-Index Computation and Comparison")
 
@@ -112,7 +111,7 @@ def app():
                         st.write(f"Difference: {diff:.4f} (95% CI: {ci_lower:.4f} - {ci_upper:.4f})")
                         st.write(f"P-value: {p_value:.4f}")
                         
-                        if c_index_new > c_index_old and p_value <0.05:
+                        if c_index_new > c_index_old and p_value < 0.05:
                             st.success("The new model shows improvement over the old model.")
                         else:
                             st.warning("The new model does not show improvement over the old model.")
@@ -131,13 +130,35 @@ def app():
                         fig, ax = plt.subplots(figsize=(10, 6))
                         x = ['Old Model', 'New Model']
                         y = [c_index_old, c_index_new]
-                        yerr = [[0, max(0, c_index_new - ci_lower)], [0, max(0, ci_upper - c_index_new)]]  # Ensure non-negative values
-                        ax.bar(x, y, yerr=yerr, capsize=5)
-                        ax.set_ylabel('C-Index')
-                        ax.set_title('C-Index Comparison')
+                        bar_width = 0.35
+                        colors = ['#1f77b4', '#ff7f0e']  # Blue for old model, Orange for new model
+
+                        bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
+                        ax.set_ylabel('C-Index', fontsize=14)
+                        ax.set_title('C-Index Comparison', fontsize=16, fontweight='bold')
                         ax.set_ylim(0.5, 1)  # C-index ranges from 0.5 to 1
-                        for i, v in enumerate(y):
-                            ax.text(i, v, f'{v:.3f}', ha='center', va='bottom')
+                        ax.tick_params(axis='both', which='major', labelsize=12)
+
+                        # Add value labels on top of bars
+                        for bar in bars:
+                            height = bar.get_height()
+                            ax.text(bar.get_x() + bar.get_width()/2., height,
+                                    f'{height:.3f}',
+                                    ha='center', va='bottom', fontsize=12)
+
+                        # Add error bars
+                        error_old = [[0], [0]]
+                        error_new = [[max(0, c_index_new - ci_lower)], [max(0, ci_upper - c_index_new)]]
+                        ax.errorbar(x, y, yerr=[error_old, error_new], fmt='none', capsize=5, color='black')
+
+                        # Add gridlines
+                        ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+                        # Add a legend
+                        ax.legend(['C-Index'], loc='lower right', fontsize=12)
+
+                        # Adjust layout and display the plot
+                        plt.tight_layout()
                         st.pyplot(fig)
                         
                         # Export results
