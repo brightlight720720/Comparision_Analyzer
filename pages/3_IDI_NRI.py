@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from scipy import stats
-import matplotlib.pyplot as plt
 import io
 
 st.set_page_config(page_title="IDI/NRI - Multi-format Analysis App", layout="wide")
@@ -131,9 +130,17 @@ if uploaded_file is not None:
                     idi, idi_ci_lower, idi_ci_upper, idi_p_value = compute_idi(y_true, y_pred_old, y_pred_new)
                     nri, nri_events, nri_nonevents, nri_ci_lower, nri_ci_upper, nri_p_value = compute_nri(y_true, y_pred_old, y_pred_new)
                 
-                st.subheader("IDI Results")
-                st.write(f"IDI: {idi:.4f} (95% CI: {idi_ci_lower:.4f} - {idi_ci_upper:.4f})")
-                st.write(f"P-value: {idi_p_value:.4f}")
+                st.subheader("IDI and NRI Results")
+                
+                # Display results in a table
+                results_table = pd.DataFrame({
+                    'Metric': ['IDI', 'NRI'],
+                    'Value': [f"{idi:.4f}", f"{nri:.4f}"],
+                    'P-value': [f"{idi_p_value:.4f}", f"{nri_p_value:.4f}"],
+                    'Confidence Interval': [f"({idi_ci_lower:.4f}, {idi_ci_upper:.4f})", f"({nri_ci_lower:.4f}, {nri_ci_upper:.4f})"]
+                })
+
+                st.table(results_table)
                 
                 st.markdown("""
                 ### Interpretation of IDI Results:
@@ -141,15 +148,7 @@ if uploaded_file is not None:
                 - The magnitude of IDI represents the degree of improvement.
                 - The 95% Confidence Interval (CI) indicates the range where the true IDI likely lies.
                 - A p-value < 0.05 suggests that the improvement is statistically significant.
-                """)
                 
-                st.subheader("NRI Results")
-                st.write(f"NRI: {nri:.4f} (95% CI: {nri_ci_lower:.4f} - {nri_ci_upper:.4f})")
-                st.write(f"NRI for events: {nri_events:.4f}")
-                st.write(f"NRI for non-events: {nri_nonevents:.4f}")
-                st.write(f"P-value: {nri_p_value:.4f}")
-                
-                st.markdown("""
                 ### Interpretation of NRI Results:
                 - Positive NRI indicates that the new model improves risk classification compared to the old model.
                 - NRI for events shows the net improvement in classifying individuals who experience the event.
@@ -160,51 +159,11 @@ if uploaded_file is not None:
                 """)
                 
                 # Export results
-                results_df = pd.DataFrame({
-                    'Metric': ['IDI', 'IDI CI Lower', 'IDI CI Upper', 'IDI P-value',
-                               'NRI', 'NRI CI Lower', 'NRI CI Upper', 'NRI P-value',
-                               'NRI Events', 'NRI Non-events'],
-                    'Value': [idi, idi_ci_lower, idi_ci_upper, idi_p_value,
-                              nri, nri_ci_lower, nri_ci_upper, nri_p_value,
-                              nri_events, nri_nonevents]
-                })
-                
-                csv = results_df.to_csv(index=False)
                 st.download_button(
                     label="Download IDI/NRI Results",
-                    data=csv,
+                    data=results_table.to_csv(index=False),
                     file_name="idi_nri_results.csv",
                     mime="text/csv",
-                )
-                
-                # Visualization
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-                
-                # IDI plot
-                ax1.bar(['IDI'], [idi], yerr=[[idi-idi_ci_lower], [idi_ci_upper-idi]], capsize=5)
-                ax1.set_ylabel('IDI')
-                ax1.set_title('Integrated Discrimination Improvement (IDI)')
-                ax1.text(0, idi, f'{idi:.3f}', ha='center', va='bottom')
-                
-                # NRI plot
-                ax2.bar(['NRI', 'NRI Events', 'NRI Non-events'], [nri, nri_events, nri_nonevents], yerr=[[nri-nri_ci_lower, 0, 0], [nri_ci_upper-nri, 0, 0]], capsize=5)
-                ax2.set_ylabel('NRI')
-                ax2.set_title('Net Reclassification Improvement (NRI)')
-                for i, v in enumerate([nri, nri_events, nri_nonevents]):
-                    ax2.text(i, v, f'{v:.3f}', ha='center', va='bottom')
-                
-                plt.tight_layout()
-                st.pyplot(fig)
-                
-                # Export plot
-                img_buffer = io.BytesIO()
-                plt.savefig(img_buffer, format='png')
-                img_buffer.seek(0)
-                st.download_button(
-                    label="Download IDI/NRI Plot",
-                    data=img_buffer,
-                    file_name="idi_nri_plot.png",
-                    mime="image/png",
                 )
 else:
     st.info("Please upload a CSV, Excel, or JSON file to begin the analysis.")
