@@ -76,6 +76,8 @@ if uploaded_file is not None:
         duration_column = st.selectbox("Select the Duration column", df.columns)
         dead_column = st.selectbox("Select the Dead column", df.columns)
         
+        st.info("You can select different numbers of columns for the old and new models.")
+        
         col1, col2 = st.columns(2)
         with col1:
             old_model_columns = st.multiselect("Select the old model columns", df.columns)
@@ -93,6 +95,8 @@ if uploaded_file is not None:
             else:
                 with st.spinner("Computing C-Index..."):
                     y_true = df[[duration_column, dead_column]].rename(columns={duration_column: 'Duration', dead_column: 'Dead'})
+                    
+                    # Compute predictions for old and new models
                     y_pred_old = df[old_model_columns].mean(axis=1)
                     y_pred_new = df[new_model_columns].mean(axis=1)
                     

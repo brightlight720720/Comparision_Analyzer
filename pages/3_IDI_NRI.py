@@ -126,6 +126,8 @@ if uploaded_file is not None:
         st.subheader("Column Selection")
         dead_column = st.selectbox("Select the Dead column", df.columns)
         
+        st.info("You can select different numbers of columns for the old and new models.")
+        
         col1, col2 = st.columns(2)
         with col1:
             old_model_columns = st.multiselect("Select the old model columns", df.columns)
