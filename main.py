@@ -3,11 +3,14 @@ import importlib
 
 st.set_page_config(page_title="Multi-format Analysis App", layout="wide")
 
-# Sidebar navigation
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Home", "C-Index", "IDI/NRI"])
+# Sidebar with author information
+st.sidebar.title("Author Information")
+st.sidebar.write("Author: YuHsuan")
+st.sidebar.write("Email: brightlight720720@gmail.com")
 
 # Dynamic page loading
+page = st.selectbox("Select a page", ["Home", "C-Index", "IDI/NRI"])
+
 if page == "Home":
     home = importlib.import_module("pages.1_Home")
     home.app()
@@ -24,7 +27,7 @@ st.write("Welcome to the Multi-format Analysis App. This application allows you 
 
 st.markdown('''
 ### Instructions:
-1. Use the sidebar to navigate between different pages.
+1. Use the page selector at the top to navigate between different pages.
 2. Start by uploading your CSV, Excel, or JSON file on the Home page.
 3. Select the required columns for analysis on the Home page.
 4. Perform C-index computations on the C-Index page.
@@ -51,5 +54,5 @@ NRI assesses the improvement in risk classification offered by a new model compa
 - **C-Index**: Compute and compare C-index for old and new models
 - **IDI/NRI**: Calculate Integrated Discrimination Improvement and Net Reclassification Improvement
 
-Please select a page from the sidebar to begin your analysis.
+Please select a page from the dropdown menu to begin your analysis.
 ''')

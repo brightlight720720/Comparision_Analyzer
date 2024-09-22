@@ -98,7 +98,7 @@ def app():
        
         return idi, nri, nri_events, nri_censored
 
-    def bootstrap_nri_idi(df, duration_col, event_col, old_model_columns, new_model_columns, n_iterations=1000):
+    def bootstrap_nri_idi(df, duration_col, event_col, old_model_columns, new_model_columns, n_iterations=100):
         nri_values = []
         idi_values = []
         
