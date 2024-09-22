@@ -10,9 +10,7 @@ st.title("Home - Multi-format Analysis App")
 st.write("Welcome to the Multi-format Analysis App. This application allows you to upload CSV, Excel, or JSON files and perform various statistical analyses.")
 st.write("Please upload your file and proceed to the C-Index and IDI/NRI pages for column selection and analysis.")
 
-# File upload
-uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
-
+# Function to read different file formats
 def read_file(file):
     file_extension = file.name.split(".")[-1].lower()
     if file_extension == "csv":
@@ -24,6 +22,9 @@ def read_file(file):
     else:
         st.error("Unsupported file format. Please upload a CSV, Excel, or JSON file.")
         return None
+
+# File upload
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "json"])
 
 if uploaded_file is not None:
     try:
@@ -123,3 +124,11 @@ if uploaded_file is not None:
         st.error(f"An error occurred while processing the file: {str(e)}")
 else:
     st.info("Please upload a CSV, Excel, or JSON file to begin the analysis.")
+
+# Add this code to ensure the sidebar is always visible
+st.sidebar.title("Navigation")
+st.sidebar.info("""
+1. Start with the Home page
+2. Then go to C-Index page
+3. Finally, visit the IDI/NRI page
+""")

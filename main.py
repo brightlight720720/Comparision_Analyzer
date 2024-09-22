@@ -37,6 +37,7 @@ NRI assesses the improvement in risk classification offered by a new model compa
 Please select a page from the sidebar to begin your analysis.
 """)
 
+# Add this code to ensure the sidebar is always visible
 st.sidebar.title("Navigation")
 st.sidebar.info("""
 1. Start with the Home page
