@@ -3,7 +3,7 @@
 ## Overview
 The Multi-format Analysis App is a Streamlit-based web application that allows users to upload CSV, Excel, or JSON files and perform various statistical analyses, including C-Index computation, Integrated Discrimination Improvement (IDI), and Net Reclassification Improvement (NRI) calculations.
 
-You can find the app here https://csv-analysis-app-brightlight7207.replit.app/IDI_NRI
+You can find the app here https://csv-analysis-app-brightlight7207.replit.app
 
 ## Features
 1. File upload support for CSV, Excel, and JSON formats
