@@ -2,6 +2,17 @@ import streamlit as st
 
 st.set_page_config(page_title="Multi-format Analysis App", layout="wide")
 
+# Add this code to ensure the sidebar is always visible and functional
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["Home", "C-Index", "IDI/NRI"])
+
+if page == "Home":
+    import pages.home
+elif page == "C-Index":
+    import pages.c_index
+elif page == "IDI/NRI":
+    import pages.idi_nri
+
 st.title("Multi-format Analysis App")
 st.write("Welcome to the Multi-format Analysis App. This application allows you to upload CSV, Excel, or JSON files and perform various statistical analyses.")
 
@@ -35,12 +46,4 @@ NRI assesses the improvement in risk classification offered by a new model compa
 - **IDI/NRI**: Calculate Integrated Discrimination Improvement and Net Reclassification Improvement
 
 Please select a page from the sidebar to begin your analysis.
-""")
-
-# Add this code to ensure the sidebar is always visible
-st.sidebar.title("Navigation")
-st.sidebar.info("""
-1. Start with the Home page
-2. Then go to C-Index page
-3. Finally, visit the IDI/NRI page
 """)
