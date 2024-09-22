@@ -127,10 +127,10 @@ def app():
                         """)
                         
                         # Visualization of C-index comparison
-                        fig, ax = plt.subplots(figsize=(12, 8))
-                        x = np.array([0, 1])
+                        fig, ax = plt.subplots(figsize=(10, 8))
+                        x = np.array([-0.2, 0.2])
                         y = [c_index_old, c_index_new]
-                        bar_width = 0.2
+                        bar_width = 0.35
                         colors = ['#ADD8E6', '#00008B']  # Light blue for old model, Deep blue for new model
 
                         bars = ax.bar(x, y, width=bar_width, color=colors, capsize=7)
