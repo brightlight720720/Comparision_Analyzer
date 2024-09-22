@@ -3,18 +3,6 @@ import importlib
 
 st.set_page_config(page_title="Multi-format Analysis App", layout="wide")
 
-# Dynamic page loading
-page = st.selectbox("Select a page", ["Home", "C-Index", "IDI/NRI"])
-
-if page == "Home":
-    home = importlib.import_module("pages.1_Home")
-    home.app()
-elif page == "C-Index":
-    c_index = importlib.import_module("pages.2_C_Index")
-    c_index.app()
-elif page == "IDI/NRI":
-    idi_nri = importlib.import_module("pages.3_IDI_NRI")
-    idi_nri.app()
 
 # Main content
 st.title("Multi-format Analysis App")
@@ -56,6 +44,19 @@ Please select a page from the dropdown menu to begin your analysis.
 st.sidebar.markdown(" ")
 st.sidebar.markdown(" ")
 st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
+st.sidebar.markdown(" ")
 st.sidebar.markdown("### Author Information")
 st.sidebar.write("Author: YuHsuan")
-st.sidebar.write("Email:\n brightlight720720@gmail.com")
+st.sidebar.write("Email:\n brightlight720@gmail.com")
